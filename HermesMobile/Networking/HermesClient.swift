@@ -182,6 +182,141 @@ final class HermesClient {
             }
         }
     }
+
+    // MARK: - Áudio nativo (Hermes 0.20+)
+
+    /// STT via `POST /api/audio/transcribe` (mesmo endpoint do desktop).
+    /// Retorna transcript vazio quando não há fala (silêncio) — não é erro.
+    func transcribeAudio(dataURL: String, mimeType: String) async throws -> String {
+        var request = URLRequest(url: try endpoint("/api/audio/transcribe"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyAuthHeaders(to: &request)
+        let body: [String: String] = [
+            "data_url": dataURL,
+            "mime_type": mimeType,
+        ]
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw HermesClientError(message: "Resposta inválida na transcrição.")
+        }
+        if !(200..<300).contains(http.statusCode) {
+            let detail = Self.errorDetail(from: data) ?? "HTTP \(http.statusCode)"
+            throw HermesClientError(message: "Transcrição falhou: \(detail)")
+        }
+        let decoded = try JSONDecoder().decode(AudioTranscriptionResponse.self, from: data)
+        return decoded.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// URL autenticada para `wss?…/api/audio/speak-stream` (ticket ou token).
+    func makeSpeakStreamURL(usesCookieAuth: Bool, legacyToken: String?) async throws -> URL {
+        guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw HermesClientError(message: "URL base inválida.")
+        }
+        comps.scheme = (comps.scheme == "https") ? "wss" : "ws"
+        comps.path = "/api/audio/speak-stream"
+        comps.fragment = nil
+
+        if usesCookieAuth {
+            let ticket = try await mintWsTicket()
+            comps.queryItems = [URLQueryItem(name: "ticket", value: ticket)]
+        } else if let tok = legacyToken?.trimmingCharacters(in: .whitespacesAndNewlines), !tok.isEmpty {
+            comps.queryItems = [URLQueryItem(name: "token", value: tok)]
+        } else {
+            comps.queryItems = nil
+        }
+
+        guard let url = comps.url else {
+            throw HermesClientError(message: "URL do speak-stream inválida.")
+        }
+        return url
+    }
+
+    /// TTS via `POST /api/audio/speak` — áudio gerado pelo provider configurado no servidor (Edge, etc.).
+    func speakText(_ text: String) async throws -> SpokenAudio {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw HermesClientError(message: "Texto vazio para TTS.")
+        }
+        var request = URLRequest(url: try endpoint("/api/audio/speak"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyAuthHeaders(to: &request)
+        request.httpBody = try JSONEncoder().encode(["text": trimmed])
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw HermesClientError(message: "Resposta inválida no TTS.")
+        }
+        if !(200..<300).contains(http.statusCode) {
+            let detail = Self.errorDetail(from: data) ?? "HTTP \(http.statusCode)"
+            throw HermesClientError(message: "TTS falhou: \(detail)")
+        }
+        let decoded = try JSONDecoder().decode(AudioSpeakResponse.self, from: data)
+        guard let audio = Self.decodeDataURL(decoded.dataURL) else {
+            throw HermesClientError(message: "Áudio TTS inválido.")
+        }
+        return SpokenAudio(data: audio, mimeType: decoded.mimeType ?? "audio/mpeg", provider: decoded.provider)
+    }
+
+    private static func errorDetail(from data: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return String(data: data, encoding: .utf8)
+        }
+        if let detail = obj["detail"] as? String { return detail }
+        if let msg = obj["message"] as? String { return msg }
+        if let err = obj["error"] as? String { return err }
+        return nil
+    }
+
+    /// Decodifica `data:audio/mpeg;base64,…` → bytes.
+    static func decodeDataURL(_ dataURL: String) -> Data? {
+        guard let comma = dataURL.firstIndex(of: ",") else { return nil }
+        let encoded = String(dataURL[dataURL.index(after: comma)...])
+        return Data(base64Encoded: encoded, options: [.ignoreUnknownCharacters])
+    }
+}
+
+/// Resposta de `POST /api/audio/transcribe`.
+struct AudioTranscriptionResponse: Decodable {
+    let ok: Bool?
+    let transcript: String
+    let provider: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, transcript, provider
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok)
+        transcript = try c.decodeIfPresent(String.self, forKey: .transcript) ?? ""
+        provider = try c.decodeIfPresent(String.self, forKey: .provider)
+    }
+}
+
+/// Resposta de `POST /api/audio/speak`.
+struct AudioSpeakResponse: Decodable {
+    let ok: Bool?
+    let dataURL: String
+    let mimeType: String?
+    let provider: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, provider
+        case dataURL = "data_url"
+        case mimeType = "mime_type"
+    }
+}
+
+struct SpokenAudio {
+    let data: Data
+    let mimeType: String
+    let provider: String?
 }
 
 // MARK: - Shared cookie-aware session factory

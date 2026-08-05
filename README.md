@@ -32,7 +32,8 @@ HermesMobile/
     │   ├── HermesClient.swift         # REST: status, login, ws-ticket
     │   └── HermesWebSocket.swift      # JSON-RPC 2.0 via /api/ws
     ├── ViewModels/HermesViewModel.swift
-    └── Views/                         # setup, chat, sidebar
+    ├── Voice/                         # STT + TTS + loop do modo de voz
+    └── Views/                         # setup, chat, voice, sidebar
 ```
 
 ---
@@ -61,6 +62,21 @@ Se já existir cookie de sessão válido, o app tenta reconectar automaticamente
 - Eventos do servidor são roteados pelo `session_id`.
 - Faixa de abas no topo + sidebar com conversas abertas e histórico do servidor.
 - Badge vermelho quando outra conversa pede aprovação, esclarecimento ou termina um turno em background.
+
+---
+
+## Modo de voz
+
+Conversa hands-free no estilo do **Hermes Desktop 0.20** (botão de waveform):
+
+1. Grava o microfone no iPhone (VAD).
+2. `POST /api/audio/transcribe` — STT nativo do servidor.
+3. `prompt.submit` no WebSocket de chat.
+4. Enquanto a resposta gera, alimenta `WS /api/audio/speak-stream` (PCM ao vivo, igual ao desktop).
+5. Se o provider não tiver streaming, fallback em `POST /api/audio/speak` e toca o áudio.
+6. Volta a ouvir. Diga “parar” / “tchau” para encerrar.
+
+Mesmas rotas de áudio do app desktop — usa o TTS/STT configurados em `~/.hermes/config.yaml`.
 
 ---
 

@@ -39,5 +39,7 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Hermes usa o microfone no modo de voz para ouvir suas perguntas.</string>
 </dict>
 </plist>

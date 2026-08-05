@@ -27,6 +27,7 @@ targets:
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        NSMicrophoneUsageDescription: O Hermes usa o microfone no modo de voz para ouvir suas perguntas.
         # Apenas NSAllowsArbitraryLoads. NÃO combine com NSAllowsLocalNetworking —
         # no iOS 10+ isso faz ArbitraryLoads ser ignorado e HTTP em *.ts.net falha (-1022).
         NSAppTransportSecurity:

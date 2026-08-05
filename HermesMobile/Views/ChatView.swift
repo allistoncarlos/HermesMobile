@@ -6,6 +6,7 @@ import SwiftUI
 
 struct ChatView: View {
     @EnvironmentObject private var vm: HermesViewModel
+    @StateObject private var voice = VoiceModeController()
     @State private var draft: String = ""
     @FocusState private var inputFocused: Bool
 
@@ -21,6 +22,10 @@ struct ChatView: View {
         }
         .navigationTitle(vm.sessionTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $voice.isPresented) {
+            VoiceModeView(voice: voice)
+                .environmentObject(vm)
+        }
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 Button {
@@ -205,21 +210,40 @@ struct ChatView: View {
                     .padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
 
-                Button {
-                    sendOrStop()
-                } label: {
-                    Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(Color.accentColor))
-                        .foregroundStyle(.white)
+                if showVoiceButton {
+                    Button {
+                        inputFocused = false
+                        voice.attach(vm)
+                        voice.present()
+                    } label: {
+                        Image(systemName: "waveform.circle.fill")
+                            .font(.system(size: 36))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .disabled(!vm.canSend)
+                    .accessibilityLabel("Modo de voz")
+                } else {
+                    Button {
+                        sendOrStop()
+                    } label: {
+                        Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(Color.accentColor))
+                            .foregroundStyle(.white)
+                    }
+                    .disabled(!vm.canSend && !vm.isStreaming)
                 }
-                .disabled(!vm.canSend && !vm.isStreaming)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 6)
         }
         .padding(.top, 6)
+    }
+
+    private var showVoiceButton: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.isStreaming
     }
 
     private func sendOrStop() {

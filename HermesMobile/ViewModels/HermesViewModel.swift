@@ -22,8 +22,20 @@ final class HermesViewModel: ObservableObject {
     @Published var showSidebar: Bool = false
 
     private var ws: HermesWebSocket?
-    private var httpClient: HermesClient?
+    /// Cliente HTTP compartilhado (login, ticket WS, áudio STT/TTS).
+    private(set) var httpClient: HermesClient?
     private var usesCookieAuth = false
+
+    /// URL do WebSocket de TTS streaming (mesmo auth do `/api/ws`).
+    func makeSpeakStreamURL() async throws -> URL {
+        guard let client = httpClient else {
+            throw HermesClientError(message: "Sem conexão com o servidor Hermes.")
+        }
+        return try await client.makeSpeakStreamURL(
+            usesCookieAuth: usesCookieAuth,
+            legacyToken: usesCookieAuth ? nil : config.sessionToken
+        )
+    }
 
     // MARK: - Init
 
