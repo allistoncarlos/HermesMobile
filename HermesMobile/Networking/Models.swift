@@ -91,11 +91,55 @@ struct ToolCall: Identifiable, Equatable {
     }
 }
 
+/// Tipo de anexo no composer / bolha do usuário.
+enum AttachmentKind: String, Equatable {
+    case image
+    case file
+}
+
+/// Um arquivo ou imagem anexado à mensagem (estilo ChatGPT).
+struct ChatAttachment: Identifiable, Equatable {
+    let id: UUID
+    var kind: AttachmentKind
+    var filename: String
+    var mimeType: String
+    /// Bytes brutos (enviados via `image.attach_bytes` / `file.attach`).
+    var data: Data
+    /// Preview local (imagens); nil para arquivos genéricos.
+    var previewData: Data?
+
+    init(
+        id: UUID = UUID(),
+        kind: AttachmentKind,
+        filename: String,
+        mimeType: String,
+        data: Data,
+        previewData: Data? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.filename = filename
+        self.mimeType = mimeType
+        self.data = data
+        self.previewData = previewData ?? (kind == .image ? data : nil)
+    }
+
+    var dataURL: String {
+        let b64 = data.base64EncodedString()
+        return "data:\(mimeType);base64,\(b64)"
+    }
+
+    var isPDF: Bool {
+        mimeType == "application/pdf" || filename.lowercased().hasSuffix(".pdf")
+    }
+}
+
 /// Uma bolha de mensagem no chat.
 struct ChatMessage: Identifiable, Equatable {
     let id: UUID
     var role: ChatRole
     var text: String
+    var attachments: [ChatAttachment]
     var reasoning: String?      // conteúdo do bloco de raciocínio (thinking)
     var tools: [ToolCall]
     var status: String?         // "streaming" | "complete" | "error"
@@ -105,6 +149,7 @@ struct ChatMessage: Identifiable, Equatable {
         id: UUID = UUID(),
         role: ChatRole,
         text: String,
+        attachments: [ChatAttachment] = [],
         reasoning: String? = nil,
         tools: [ToolCall] = [],
         status: String? = nil,
@@ -113,6 +158,7 @@ struct ChatMessage: Identifiable, Equatable {
         self.id = id
         self.role = role
         self.text = text
+        self.attachments = attachments
         self.reasoning = reasoning
         self.tools = tools
         self.status = status

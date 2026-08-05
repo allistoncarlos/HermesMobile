@@ -86,14 +86,25 @@ Mesmas rotas de áudio do app desktop — usa o TTS/STT configurados em `~/.herm
 - **Providers:** `GET /api/auth/providers` (`supports_password`).
 - **Login:** `POST /auth/password-login` JSON `{ provider, username, password, next }`.
 - **Ticket WS:** `POST /api/auth/ws-ticket` (cookie autenticado) → `{ ticket, ttl_seconds }`.
-- **Chat WS JSON-RPC:** `session.create` / `session.resume` / `session.list` / `session.activate`, `prompt.submit`, `approval.respond`, `clarify.respond`, `session.interrupt`.
+- **Chat WS JSON-RPC:** `session.create` / `session.resume` / `session.list` / `session.activate`, `prompt.submit`, `image.attach_bytes`, `file.attach`, `pdf.attach`, `approval.respond`, `clarify.respond`, `session.interrupt`.
 - **Eventos:** `message.delta`, `message.complete`, `reasoning.delta`, `tool.*`, `approval.request`, `clarify.*`, `turn.*`, etc.
+
+---
+
+## Anexos
+
+No composer, o botão **+** permite anexar fotos (PhotosPicker) ou arquivos (document picker), no estilo ChatGPT:
+
+1. Imagens → `image.attach_bytes` (base64) antes do `prompt.submit`.
+2. PDFs → `pdf.attach` (com fallback para `file.attach`).
+3. Demais arquivos → `file.attach` com `data_url`.
+
+Limite de 25 MB por anexo (mesmo teto do gateway).
 
 ---
 
 ## Próximos passos possíveis
 
 - OAuth / OIDC (além de basic password).
-- Envio de anexos/imagens.
 - Painel de skills/memória/kanban.
 - Notificações push quando um turno termina em background.

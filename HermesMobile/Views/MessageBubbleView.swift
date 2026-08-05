@@ -15,13 +15,20 @@ struct MessageBubbleView: View {
             case .user:
                 HStack {
                     Spacer(minLength: 48)
-                    Text(message.text)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .cornerRadius(18, corners: [.topLeft, .topRight, .bottomLeft])
-                        .textSelection(.enabled)
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if !message.attachments.isEmpty {
+                            MessageAttachmentsView(attachments: message.attachments)
+                        }
+                        if !message.text.isEmpty {
+                            Text(message.text)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color.accentColor)
+                                .foregroundStyle(.white)
+                                .cornerRadius(18, corners: [.topLeft, .topRight, .bottomLeft])
+                                .textSelection(.enabled)
+                        }
+                    }
                 }
 
             case .assistant:
@@ -103,6 +110,43 @@ struct MessageBubbleView: View {
         case "done": return .green
         case "error": return .red
         default: return .secondary
+        }
+    }
+}
+
+// ============================================================================
+//  MessageAttachmentsView — thumbnails / chips de anexos na bolha do usuário.
+// ============================================================================
+
+private struct MessageAttachmentsView: View {
+    let attachments: [ChatAttachment]
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            ForEach(attachments) { attachment in
+                if attachment.kind == .image,
+                   let preview = attachment.previewData,
+                   let uiImage = UIImage(data: preview) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 180, height: 180)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: attachment.isPDF ? "doc.richtext.fill" : "doc.fill")
+                        Text(attachment.filename)
+                            .lineLimit(1)
+                    }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.85))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
         }
     }
 }

@@ -351,33 +351,128 @@ final class HermesViewModel: ObservableObject {
 
     // MARK: - Envio de mensagem
 
-    func send(_ rawText: String) async {
+    func send(_ rawText: String, attachments: [ChatAttachment] = []) async {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let ws, var chat = mutableActiveChat() else { return }
+        guard (!text.isEmpty || !attachments.isEmpty), let ws, var chat = mutableActiveChat() else { return }
 
         if chat.hasPendingClarify {
+            guard !text.isEmpty else { return }
             await respondClarify(text)
             return
         }
 
-        chat.messages.append(ChatMessage(role: .user, text: text))
+        chat.messages.append(ChatMessage(role: .user, text: text, attachments: attachments))
         let assistant = ChatMessage(role: .assistant, text: "", status: "streaming", isStreaming: true)
         chat.messages.append(assistant)
         chat.lastAssistantIndex = chat.messages.count - 1
-        chat.toolStatusText = nil
+        chat.toolStatusText = attachments.isEmpty ? nil : "Enviando anexos…"
         chat.isStreaming = true
         chat.needsAttention = false
         commit(chat)
         statusMessage = nil
 
         do {
+            let promptText = try await uploadAttachments(attachments, sessionID: chat.id, visibleText: text)
+            if var updated = self.chat(for: chat.id) {
+                updated.toolStatusText = nil
+                commit(updated)
+            }
             _ = try await ws.call(
                 method: "prompt.submit",
-                params: ["session_id": .string(chat.id), "text": .string(text)]
+                params: ["session_id": .string(chat.id), "text": .string(promptText)]
             )
         } catch {
             finishTurn(sessionID: chat.id, error: error.localizedDescription)
         }
+    }
+
+    /// Faz upload remoto dos anexos (`image.attach_bytes` / `file.attach` / `pdf.attach`)
+    /// e monta o texto do prompt com as refs `@file:` quando necessário.
+    private func uploadAttachments(
+        _ attachments: [ChatAttachment],
+        sessionID: String,
+        visibleText: String
+    ) async throws -> String {
+        guard let ws else {
+            throw HermesClientError(message: "WebSocket desconectado.")
+        }
+
+        var fileRefs: [String] = []
+        var hasImage = false
+
+        for attachment in attachments {
+            switch attachment.kind {
+            case .image:
+                hasImage = true
+                let result = try await ws.call(
+                    method: "image.attach_bytes",
+                    params: [
+                        "session_id": .string(sessionID),
+                        "content_base64": .string(attachment.data.base64EncodedString()),
+                        "filename": .string(attachment.filename),
+                    ]
+                )
+                if result["attached"]?.boolValue == false {
+                    let msg = result["message"]?.stringValue ?? "Falha ao anexar \(attachment.filename)"
+                    throw HermesClientError(message: msg)
+                }
+
+            case .file:
+                if attachment.isPDF {
+                    do {
+                        let result = try await ws.call(
+                            method: "pdf.attach",
+                            params: [
+                                "session_id": .string(sessionID),
+                                "content_base64": .string(attachment.data.base64EncodedString()),
+                                "filename": .string(attachment.filename),
+                            ]
+                        )
+                        // pdf.attach renderiza páginas como imagens enfileiradas.
+                        if result["attached"]?.boolValue == false {
+                            throw HermesClientError(message: result["message"]?.stringValue ?? "Falha ao anexar PDF")
+                        }
+                        hasImage = true
+                    } catch {
+                        if let ref = try await attachFile(attachment, sessionID: sessionID, ws: ws) {
+                            fileRefs.append(ref)
+                        }
+                    }
+                } else if let ref = try await attachFile(attachment, sessionID: sessionID, ws: ws) {
+                    fileRefs.append(ref)
+                }
+            }
+        }
+
+        let parts = [fileRefs.joined(separator: "\n"), visibleText].filter { !$0.isEmpty }
+        if !parts.isEmpty {
+            return parts.joined(separator: "\n\n")
+        }
+        if hasImage {
+            return "O que você vê nesta imagem?"
+        }
+        return visibleText
+    }
+
+    private func attachFile(
+        _ attachment: ChatAttachment,
+        sessionID: String,
+        ws: HermesWebSocket
+    ) async throws -> String? {
+        let result = try await ws.call(
+            method: "file.attach",
+            params: [
+                "session_id": .string(sessionID),
+                "path": .string(attachment.filename),
+                "name": .string(attachment.filename),
+                "data_url": .string(attachment.dataURL),
+            ]
+        )
+        if result["attached"]?.boolValue == false {
+            let msg = result["message"]?.stringValue ?? "Falha ao anexar \(attachment.filename)"
+            throw HermesClientError(message: msg)
+        }
+        return result["ref_text"]?.stringValue
     }
 
     func stopStreaming() async {

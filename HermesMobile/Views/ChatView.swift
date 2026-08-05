@@ -1,14 +1,23 @@
+import PhotosUI
 import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
 
 // ============================================================================
-//  ChatView — conversa estilo ChatGPT com chats simultâneos e sidebar.
+//  ChatView — conversa estilo ChatGPT com chats simultâneos, sidebar e anexos.
 // ============================================================================
 
 struct ChatView: View {
     @EnvironmentObject private var vm: HermesViewModel
     @StateObject private var voice = VoiceModeController()
     @State private var draft: String = ""
+    @State private var pendingAttachments: [ChatAttachment] = []
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var showFileImporter = false
+    @State private var attachError: String?
     @FocusState private var inputFocused: Bool
+
+    private static let maxAttachmentBytes = 25 * 1024 * 1024
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,6 +88,24 @@ struct ChatView: View {
             NavigationStack {
                 ChatSidebarView()
             }
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            Task { await handleFileImport(result) }
+        }
+        .alert("Anexo", isPresented: Binding(
+            get: { attachError != nil },
+            set: { if !$0 { attachError = nil } }
+        )) {
+            Button("OK", role: .cancel) { attachError = nil }
+        } message: {
+            Text(attachError ?? "")
+        }
+        .onChange(of: photoPickerItems) { items in
+            Task { await loadPhotos(items) }
         }
     }
 
@@ -202,7 +229,13 @@ struct ChatView: View {
                 .padding(.top, 8)
             }
 
+            if !pendingAttachments.isEmpty {
+                attachmentStrip
+            }
+
             HStack(alignment: .bottom, spacing: 10) {
+                attachMenu
+
                 TextField(vm.hasPendingClarify ? "Resposta…" : "Mensagem", text: $draft, axis: .vertical)
                     .lineLimit(1...6)
                     .focused($inputFocused)
@@ -242,8 +275,49 @@ struct ChatView: View {
         .padding(.top, 6)
     }
 
+    private var attachMenu: some View {
+        Menu {
+            PhotosPicker(
+                selection: $photoPickerItems,
+                maxSelectionCount: 8,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                Label("Fotos e imagens", systemImage: "photo.on.rectangle")
+            }
+            Button {
+                showFileImporter = true
+            } label: {
+                Label("Arquivos", systemImage: "doc")
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color(.secondarySystemBackground)))
+                .foregroundStyle(Color.accentColor)
+        }
+        .disabled(!vm.canSend || vm.isStreaming || vm.hasPendingClarify)
+        .accessibilityLabel("Anexar")
+    }
+
+    private var attachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(pendingAttachments) { attachment in
+                    AttachmentChip(attachment: attachment) {
+                        pendingAttachments.removeAll { $0.id == attachment.id }
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
     private var showVoiceButton: Bool {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.isStreaming
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && pendingAttachments.isEmpty
+            && !vm.isStreaming
     }
 
     private func sendOrStop() {
@@ -253,9 +327,154 @@ struct ChatView: View {
             Task { await vm.stopStreaming() }
             return
         }
-        guard !text.isEmpty else { return }
+        let attachments = pendingAttachments
+        guard !text.isEmpty || !attachments.isEmpty else { return }
         draft = ""
-        Task { await vm.send(text) }
+        pendingAttachments = []
+        photoPickerItems = []
+        Task { await vm.send(text, attachments: attachments) }
+    }
+
+    // MARK: - Pickers
+
+    private func loadPhotos(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+        var loaded: [ChatAttachment] = []
+        for item in items {
+            do {
+                if let data = try await item.loadTransferable(type: Data.self) {
+                    let compressed = Self.compressImageData(data) ?? data
+                    guard compressed.count <= Self.maxAttachmentBytes else {
+                        attachError = "A imagem excede o limite de 25 MB."
+                        continue
+                    }
+                    let filename = "image-\(UUID().uuidString.prefix(8)).jpg"
+                    loaded.append(ChatAttachment(
+                        kind: .image,
+                        filename: filename,
+                        mimeType: "image/jpeg",
+                        data: compressed,
+                        previewData: compressed
+                    ))
+                }
+            } catch {
+                attachError = "Não foi possível carregar a imagem."
+            }
+        }
+        pendingAttachments.append(contentsOf: loaded)
+        photoPickerItems = []
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) async {
+        switch result {
+        case .failure(let error):
+            attachError = error.localizedDescription
+        case .success(let urls):
+            var loaded: [ChatAttachment] = []
+            for url in urls {
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let data = try Data(contentsOf: url)
+                    guard data.count <= Self.maxAttachmentBytes else {
+                        attachError = "“\(url.lastPathComponent)” excede o limite de 25 MB."
+                        continue
+                    }
+                    let filename = url.lastPathComponent
+                    let mime = Self.mimeType(for: url) ?? "application/octet-stream"
+                    let isImage = mime.hasPrefix("image/")
+                    let payload: Data
+                    let preview: Data?
+                    let outMime: String
+                    if isImage, let compressed = Self.compressImageData(data) {
+                        payload = compressed
+                        preview = compressed
+                        outMime = "image/jpeg"
+                    } else {
+                        payload = data
+                        preview = isImage ? data : nil
+                        outMime = mime
+                    }
+                    loaded.append(ChatAttachment(
+                        kind: isImage ? .image : .file,
+                        filename: filename,
+                        mimeType: outMime,
+                        data: payload,
+                        previewData: preview
+                    ))
+                } catch {
+                    attachError = "Não foi possível ler “\(url.lastPathComponent)”."
+                }
+            }
+            pendingAttachments.append(contentsOf: loaded)
+        }
+    }
+
+    private static func mimeType(for url: URL) -> String? {
+        if let ut = UTType(filenameExtension: url.pathExtension),
+           let mime = ut.preferredMIMEType {
+            return mime
+        }
+        return nil
+    }
+
+    private static func compressImageData(_ data: Data) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+        let maxSide: CGFloat = 2048
+        let size = image.size
+        let scale = min(1, maxSide / max(size.width, size.height))
+        let target = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: target)
+        let resized = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+        return resized.jpegData(compressionQuality: 0.82)
+    }
+}
+
+// ============================================================================
+//  AttachmentChip — preview compacto de anexo pendente no composer.
+// ============================================================================
+
+private struct AttachmentChip: View {
+    let attachment: ChatAttachment
+    let onRemove: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if attachment.kind == .image, let preview = attachment.previewData,
+                   let uiImage = UIImage(data: preview) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 64, height: 64)
+                        .clipped()
+                } else {
+                    VStack(spacing: 4) {
+                        Image(systemName: attachment.isPDF ? "doc.richtext" : "doc.fill")
+                            .font(.title3)
+                        Text(attachment.filename)
+                            .font(.caption2)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(.secondary)
+                    .frame(width: 88, height: 64)
+                    .padding(.horizontal, 4)
+                }
+            }
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.65))
+                    .font(.system(size: 18))
+            }
+            .offset(x: 6, y: -6)
+        }
     }
 }
 
