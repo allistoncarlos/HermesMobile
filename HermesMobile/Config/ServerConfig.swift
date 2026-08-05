@@ -23,10 +23,17 @@ final class ServerConfig: ObservableObject {
         didSet { UserDefaults.standard.set(username, forKey: Keys.username) }
     }
 
+    /// Sessão já estabelecida com sucesso neste dispositivo (para auto-reconnect).
+    var canRestoreSession: Bool {
+        get { UserDefaults.standard.bool(forKey: Keys.canRestore) }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.canRestore) }
+    }
+
     private enum Keys {
         static let baseURL  = "hermes.serverBaseURL"
         static let token    = "hermes.sessionToken"
         static let username = "hermes.username"
+        static let canRestore = "hermes.canRestoreSession"
     }
 
     init() {
@@ -63,6 +70,7 @@ final class ServerConfig: ObservableObject {
         baseURLString = ""
         sessionToken = ""
         username = ""
+        canRestoreSession = false
     }
 }
 

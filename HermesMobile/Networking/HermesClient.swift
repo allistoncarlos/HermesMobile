@@ -127,14 +127,35 @@ final class HermesClient {
     }
 
     /// Verifica se já existe sessão cookie válida (AT ou RT).
+    /// Checa `cookies(for:)` e, como fallback, o jar inteiro filtrado pelo host —
+    /// `cookies(for:)` às vezes falha com diferenças de path/trailing slash.
     func hasLiveSessionCookie() -> Bool {
-        guard let cookies = urlSession.configuration.httpCookieStorage?.cookies(for: baseURL) else {
+        let sessionNames: Set<String> = [
+            "hermes_session_at", "__Secure-hermes_session_at", "__Host-hermes_session_at",
+            "hermes_session_rt", "__Secure-hermes_session_rt", "__Host-hermes_session_rt",
+        ]
+        let storage = urlSession.configuration.httpCookieStorage
+        if let cookies = storage?.cookies(for: baseURL),
+           cookies.contains(where: { sessionNames.contains($0.name) }) {
+            return true
+        }
+        // Fallback sem path trailing: tenta a URL sem barra final.
+        if var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) {
+            while comps.path.hasSuffix("/") { comps.path.removeLast() }
+            if comps.path.isEmpty { comps.path = "/" }
+            if let alt = comps.url,
+               let cookies = storage?.cookies(for: alt),
+               cookies.contains(where: { sessionNames.contains($0.name) }) {
+                return true
+            }
+        }
+        guard let host = baseURL.host?.lowercased(), let all = storage?.cookies else {
             return false
         }
-        let names = Set(cookies.map(\.name))
-        let at = ["hermes_session_at", "__Secure-hermes_session_at", "__Host-hermes_session_at"]
-        let rt = ["hermes_session_rt", "__Secure-hermes_session_rt", "__Host-hermes_session_rt"]
-        return at.contains(where: names.contains) || rt.contains(where: names.contains)
+        return all.contains { cookie in
+            sessionNames.contains(cookie.name)
+            && cookie.domain.lowercased().hasSuffix(host.trimmingPrefix("."))
+        }
     }
 
     /// Mint de ticket single-use para upgrade WebSocket em modo gated.

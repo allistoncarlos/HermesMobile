@@ -215,6 +215,7 @@ final class HermesViewModel: ObservableObject {
 
     func logout() async {
         await httpClient?.logout()
+        config.canRestoreSession = false
         disconnect()
         statusMessage = "Sessão encerrada."
     }
@@ -232,6 +233,7 @@ final class HermesViewModel: ObservableObject {
                 activeChatID = sid
                 if !connectionIsError() {
                     connectionState = .connected
+                    config.canRestoreSession = true
                 }
             }
         } catch {

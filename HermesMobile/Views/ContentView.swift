@@ -6,14 +6,16 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var vm: HermesViewModel
+    @State private var didAttemptRestore = false
 
     var body: some View {
         NavigationStack {
             Group {
                 switch vm.connectionState {
+                case .connecting where shouldShowRestoreSplash:
+                    // Evita flash da tela de login ao reabrir o app já autenticado.
+                    restoreSplash
                 case .disconnected, .failed, .waitingAuth, .connecting:
-                    // Mantém a tela de setup durante .connecting para o spinner
-                    // e a mensagem de erro permanecerem visíveis.
                     ServerSetupView()
                 case .connected:
                     ChatView()
@@ -21,13 +23,39 @@ struct ContentView: View {
             }
         }
         .task {
+            guard !didAttemptRestore else { return }
+            didAttemptRestore = true
             guard vm.connectionState == .disconnected,
-                  vm.config.hasSavedConfig,
-                  let base = ServerConfig.normalizedURL(from: vm.config.baseURLString) else { return }
-            let client = HermesClient(baseURL: base, urlSession: HermesHTTPSession.shared)
-            if client.hasLiveSessionCookie() || !vm.config.sessionToken.isEmpty {
-                await vm.connect()
+                  vm.config.hasSavedConfig else { return }
+            // Sempre tenta reconectar se houver servidor salvo.
+            // `connect()` decide sozinho se precisa de senha/token ou se a sessão cookie ainda vale.
+            await vm.connect()
+        }
+    }
+
+    /// Splash enquanto restaura sessão salva (cookie, token ou login anterior).
+    private var shouldShowRestoreSplash: Bool {
+        vm.config.hasSavedConfig && (
+            vm.config.canRestoreSession
+            || !vm.config.sessionToken.isEmpty
+            || !vm.config.username.isEmpty
+        )
+    }
+
+    private var restoreSplash: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .controlSize(.large)
+            Text("Entrando…")
+                .font(.headline)
+            if !vm.config.baseURLString.isEmpty {
+                Text(vm.config.baseURLString)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

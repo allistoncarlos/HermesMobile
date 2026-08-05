@@ -51,7 +51,7 @@ HermesMobile/
    - Conecta em `ws(s)://…/api/ws?ticket=…` (ticket single-use).
 4. **Token legado** (opções avançadas): só para servidores que ainda usam `X-Hermes-Session-Token` / `?token=`.
 
-Se já existir cookie de sessão válido, o app tenta reconectar automaticamente ao abrir.
+Se já existir configuração salva (URL do servidor), o app tenta reconectar automaticamente ao abrir — e entra direto no chat quando a sessão cookie/token ainda é válida.
 
 ---
 
