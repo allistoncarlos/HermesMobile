@@ -8,7 +8,7 @@ import Foundation
 
 /// Um valor JSON preservado de forma tolerante. Decodifica qualquer payload
 /// da API sem quebrar quando o servidor adiciona campos novos.
-indirect enum JSONValue: Codable, Equatable {
+indirect enum JSONValue: Codable, Equatable, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -92,20 +92,21 @@ struct ToolCall: Identifiable, Equatable {
 }
 
 /// Tipo de anexo no composer / bolha do usuário.
-enum AttachmentKind: String, Equatable {
+enum AttachmentKind: String, Equatable, Sendable {
     case image
     case file
 }
 
 /// Um arquivo ou imagem anexado à mensagem (estilo ChatGPT).
-struct ChatAttachment: Identifiable, Equatable {
+struct ChatAttachment: Identifiable, Equatable, Sendable {
     let id: UUID
     var kind: AttachmentKind
     var filename: String
     var mimeType: String
     /// Bytes brutos (enviados via `image.attach_bytes` / `file.attach`).
+    /// Pode ficar vazio depois do upload — a bolha só precisa do preview.
     var data: Data
-    /// Preview local (imagens); nil para arquivos genéricos.
+    /// Preview local compacto (imagens); nil para arquivos genéricos.
     var previewData: Data?
 
     init(
@@ -121,7 +122,17 @@ struct ChatAttachment: Identifiable, Equatable {
         self.filename = filename
         self.mimeType = mimeType
         self.data = data
-        self.previewData = previewData ?? (kind == .image ? data : nil)
+        self.previewData = previewData
+    }
+
+    /// Igualdade barata: não compara bytes (evita travar o SwiftUI no streaming).
+    static func == (lhs: ChatAttachment, rhs: ChatAttachment) -> Bool {
+        lhs.id == rhs.id
+            && lhs.kind == rhs.kind
+            && lhs.filename == rhs.filename
+            && lhs.mimeType == rhs.mimeType
+            && lhs.data.count == rhs.data.count
+            && lhs.previewData?.count == rhs.previewData?.count
     }
 
     var dataURL: String {
@@ -131,6 +142,22 @@ struct ChatAttachment: Identifiable, Equatable {
 
     var isPDF: Bool {
         mimeType == "application/pdf" || filename.lowercased().hasSuffix(".pdf")
+    }
+
+    var isVideo: Bool {
+        mimeType.hasPrefix("video/")
+    }
+
+    /// Cópia só para UI: mantém thumbnail e descarta o payload pesado.
+    func forDisplay() -> ChatAttachment {
+        ChatAttachment(
+            id: id,
+            kind: kind,
+            filename: filename,
+            mimeType: mimeType,
+            data: Data(),
+            previewData: previewData
+        )
     }
 }
 

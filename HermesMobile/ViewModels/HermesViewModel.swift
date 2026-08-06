@@ -351,6 +351,8 @@ final class HermesViewModel: ObservableObject {
 
     // MARK: - Envio de mensagem
 
+    private static let attachTimeoutSeconds: TimeInterval = 120
+
     func send(_ rawText: String, attachments: [ChatAttachment] = []) async {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (!text.isEmpty || !attachments.isEmpty), let ws, var chat = mutableActiveChat() else { return }
@@ -361,7 +363,9 @@ final class HermesViewModel: ObservableObject {
             return
         }
 
-        chat.messages.append(ChatMessage(role: .user, text: text, attachments: attachments))
+        // Bolha do usuário só guarda preview leve — bytes completos ficam só no upload.
+        let displayAttachments = attachments.map { $0.forDisplay() }
+        chat.messages.append(ChatMessage(role: .user, text: text, attachments: displayAttachments))
         let assistant = ChatMessage(role: .assistant, text: "", status: "streaming", isStreaming: true)
         chat.messages.append(assistant)
         chat.lastAssistantIndex = chat.messages.count - 1
@@ -379,7 +383,8 @@ final class HermesViewModel: ObservableObject {
             }
             _ = try await ws.call(
                 method: "prompt.submit",
-                params: ["session_id": .string(chat.id), "text": .string(promptText)]
+                params: ["session_id": .string(chat.id), "text": .string(promptText)],
+                timeoutSeconds: Self.attachTimeoutSeconds
             )
         } catch {
             finishTurn(sessionID: chat.id, error: error.localizedDescription)
@@ -404,13 +409,15 @@ final class HermesViewModel: ObservableObject {
             switch attachment.kind {
             case .image:
                 hasImage = true
+                let b64 = await Self.base64Encode(attachment.data)
                 let result = try await ws.call(
                     method: "image.attach_bytes",
                     params: [
                         "session_id": .string(sessionID),
-                        "content_base64": .string(attachment.data.base64EncodedString()),
+                        "content_base64": .string(b64),
                         "filename": .string(attachment.filename),
-                    ]
+                    ],
+                    timeoutSeconds: Self.attachTimeoutSeconds
                 )
                 if result["attached"]?.boolValue == false {
                     let msg = result["message"]?.stringValue ?? "Falha ao anexar \(attachment.filename)"
@@ -420,13 +427,15 @@ final class HermesViewModel: ObservableObject {
             case .file:
                 if attachment.isPDF {
                     do {
+                        let b64 = await Self.base64Encode(attachment.data)
                         let result = try await ws.call(
                             method: "pdf.attach",
                             params: [
                                 "session_id": .string(sessionID),
-                                "content_base64": .string(attachment.data.base64EncodedString()),
+                                "content_base64": .string(b64),
                                 "filename": .string(attachment.filename),
-                            ]
+                            ],
+                            timeoutSeconds: Self.attachTimeoutSeconds
                         )
                         // pdf.attach renderiza páginas como imagens enfileiradas.
                         if result["attached"]?.boolValue == false {
@@ -451,6 +460,9 @@ final class HermesViewModel: ObservableObject {
         if hasImage {
             return "O que você vê nesta imagem?"
         }
+        if !attachments.isEmpty {
+            throw HermesClientError(message: "Não foi possível preparar o anexo para envio.")
+        }
         return visibleText
     }
 
@@ -459,20 +471,33 @@ final class HermesViewModel: ObservableObject {
         sessionID: String,
         ws: HermesWebSocket
     ) async throws -> String? {
+        let dataURL = await Task.detached(priority: .userInitiated) {
+            attachment.dataURL
+        }.value
         let result = try await ws.call(
             method: "file.attach",
             params: [
                 "session_id": .string(sessionID),
                 "path": .string(attachment.filename),
                 "name": .string(attachment.filename),
-                "data_url": .string(attachment.dataURL),
-            ]
+                "data_url": .string(dataURL),
+            ],
+            timeoutSeconds: Self.attachTimeoutSeconds
         )
         if result["attached"]?.boolValue == false {
             let msg = result["message"]?.stringValue ?? "Falha ao anexar \(attachment.filename)"
             throw HermesClientError(message: msg)
         }
-        return result["ref_text"]?.stringValue
+        guard let ref = result["ref_text"]?.stringValue, !ref.isEmpty else {
+            throw HermesClientError(message: "Servidor não retornou referência para \(attachment.filename).")
+        }
+        return ref
+    }
+
+    private static func base64Encode(_ data: Data) async -> String {
+        await Task.detached(priority: .userInitiated) {
+            data.base64EncodedString()
+        }.value
     }
 
     func stopStreaming() async {
@@ -753,6 +778,16 @@ final class HermesViewModel: ObservableObject {
 
     private func finishTurn(sessionID: String, error: String?) {
         guard var chat = chat(for: sessionID) else { return }
+        if let i = chat.lastAssistantIndex, i < chat.messages.count {
+            if chat.messages[i].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               (chat.messages[i].reasoning ?? "").isEmpty,
+               chat.messages[i].tools.isEmpty {
+                chat.messages.remove(at: i)
+            } else {
+                chat.messages[i].isStreaming = false
+                chat.messages[i].status = error == nil ? "complete" : "error"
+            }
+        }
         chat.isStreaming = false
         chat.lastAssistantIndex = nil
         chat.toolStatusText = nil

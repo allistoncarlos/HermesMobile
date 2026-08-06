@@ -154,8 +154,14 @@ final class HermesWebSocket: @unchecked Sendable {
     // MARK: - Requisições
 
     /// Envia uma requisição JSON-RPC e aguarda a resposta (corresponde ao `id`).
+    /// - Parameter timeoutSeconds: se > 0, falha com timeout em vez de esperar para sempre
+    ///   (importante em uploads grandes de anexo).
     @discardableResult
-    func call(method: String, params: [String: JSONValue] = [:]) async throws -> JSONValue {
+    func call(
+        method: String,
+        params: [String: JSONValue] = [:],
+        timeoutSeconds: TimeInterval = 0
+    ) async throws -> JSONValue {
         let id: Int
         lock.lock()
         guard let task, reading else {
@@ -166,20 +172,45 @@ final class HermesWebSocket: @unchecked Sendable {
         nextID += 1
         lock.unlock()
 
-        let request: JSONValue = .object([
-            "jsonrpc": .string("2.0"),
-            "id": .number(Double(id)),
-            "method": .string(method),
-            "params": .object(params),
-        ])
+        // Encode em background — payloads de anexo (base64) travam a UI no MainActor.
+        let text = try await Task.detached(priority: .userInitiated) {
+            let request: JSONValue = .object([
+                "jsonrpc": .string("2.0"),
+                "id": .number(Double(id)),
+                "method": .string(method),
+                "params": .object(params),
+            ])
+            let data = try JSONEncoder().encode(request)
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw WSClientError(message: "Não foi possível codificar a mensagem.")
+            }
+            return text
+        }.value
 
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(request)
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw WSClientError(message: "Não foi possível codificar a mensagem.")
+        if timeoutSeconds <= 0 {
+            return try await sendAndWait(id: id, text: text)
         }
 
-        return try await withCheckedContinuation { (cont: CheckedContinuation<Result<JSONValue, Error>, Never>) in
+        return try await withThrowingTaskGroup(of: JSONValue.self) { group in
+            group.addTask {
+                try await self.sendAndWait(id: id, text: text)
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                self.resolve(
+                    id: id,
+                    result: .failure(WSClientError(message: "Tempo esgotado ao chamar \(method)."))
+                )
+                throw WSClientError(message: "Tempo esgotado ao chamar \(method).")
+            }
+            let value = try await group.next()!
+            group.cancelAll()
+            return value
+        }
+    }
+
+    private func sendAndWait(id: Int, text: String) async throws -> JSONValue {
+        try await withCheckedContinuation { (cont: CheckedContinuation<Result<JSONValue, Error>, Never>) in
             lock.lock()
             continuations[id] = cont
             let t = self.task

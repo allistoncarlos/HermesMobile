@@ -124,18 +124,14 @@ private struct MessageAttachmentsView: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
             ForEach(attachments) { attachment in
-                if attachment.kind == .image,
-                   let preview = attachment.previewData,
-                   let uiImage = UIImage(data: preview) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
+                if attachment.kind == .image, let preview = attachment.previewData {
+                    AttachmentThumbnail(data: preview, cornerRadius: 14)
                         .frame(width: 180, height: 180)
-                        .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
                 } else {
                     HStack(spacing: 8) {
-                        Image(systemName: attachment.isPDF ? "doc.richtext.fill" : "doc.fill")
+                        Image(systemName: attachment.isVideo
+                              ? "video.fill"
+                              : (attachment.isPDF ? "doc.richtext.fill" : "doc.fill"))
                         Text(attachment.filename)
                             .lineLimit(1)
                     }
