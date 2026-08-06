@@ -187,31 +187,34 @@ struct ChatView: View {
                     if vm.messages.isEmpty {
                         emptyState
                     }
-                    ForEach(vm.messages) { message in
-                        MessageBubbleView(message: message)
-                            .id(message.id)
-                    }
-                    if let status = vm.toolStatusText {
-                        HStack {
-                            ProgressView().controlSize(.small)
-                            Text(status).font(.caption).foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 2)
+                    ForEach(Array(vm.messages.enumerated()), id: \.element.id) { index, message in
+                        let isLastAssistant = message.role == .assistant
+                            && index == vm.messages.lastIndex(where: { $0.role == .assistant })
+                        MessageBubbleView(
+                            message: message,
+                            activityText: isLastAssistant ? vm.toolStatusText : nil
+                        )
+                        .id(message.id)
                     }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
             }
-            .onChange(of: vm.messages.count) { _ in
+            .onChange(of: vm.messages.count) { _, _ in
                 scrollToBottom(proxy)
             }
-            .onChange(of: vm.messages.last?.text) { _ in
+            .onChange(of: vm.messages.last?.text) { _, _ in
                 withAnimation(.easeOut(duration: 0.1)) {
                     if let last = vm.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
-            .onChange(of: vm.activeChatID) { _ in
+            .onChange(of: vm.toolStatusText) { _, status in
+                guard status != nil else { return }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    if let last = vm.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+            .onChange(of: vm.activeChatID) { _, _ in
                 scrollToBottom(proxy)
             }
         }

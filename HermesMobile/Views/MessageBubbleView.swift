@@ -8,6 +8,8 @@ import UIKit
 
 struct MessageBubbleView: View {
     let message: ChatMessage
+    /// Status de atividade do turno (upload, pensando, ferramenta…).
+    var activityText: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -34,6 +36,9 @@ struct MessageBubbleView: View {
             case .assistant:
                 VStack(alignment: .leading, spacing: 8) {
                     reasoningBlock
+                    if showThinkingPlaceholder {
+                        thinkingIndicator
+                    }
                     if !message.text.isEmpty {
                         MarkdownText(message.text + streamingCursor)
                             .textSelection(.enabled)
@@ -57,21 +62,40 @@ struct MessageBubbleView: View {
         message.isStreaming ? "▍" : ""
     }
 
+    /// Placeholder enquanto o servidor trabalha e ainda não há texto na bolha.
+    private var showThinkingPlaceholder: Bool {
+        message.isStreaming
+            && message.text.isEmpty
+            && message.tools.isEmpty
+            && (message.reasoning ?? "").isEmpty
+    }
+
+    private var thinkingIndicator: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text(activityText ?? "Pensando…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .accessibilityLabel(activityText ?? "Pensando")
+    }
+
     @ViewBuilder
     private var reasoningBlock: some View {
         if let reasoning = message.reasoning, !reasoning.isEmpty {
-            DisclosureGroup {
-                Text(reasoning)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            } label: {
-                Label("Raciocínio", systemImage: "brain")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color(.secondarySystemBackground)))
+            ReasoningIndicator(
+                text: reasoning,
+                isStreaming: message.isStreaming && message.text.isEmpty
+            )
         }
     }
 
@@ -110,6 +134,48 @@ struct MessageBubbleView: View {
         case "done": return .green
         case "error": return .red
         default: return .secondary
+        }
+    }
+}
+
+// ============================================================================
+//  ReasoningIndicator — bloco de raciocínio com estado ao vivo.
+// ============================================================================
+
+private struct ReasoningIndicator: View {
+    let text: String
+    let isStreaming: Bool
+
+    @State private var expanded = true
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            HStack(spacing: 6) {
+                if isStreaming {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+                Label(
+                    isStreaming ? "Raciocinando…" : "Raciocínio",
+                    systemImage: "brain"
+                )
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
+        .onAppear {
+            if isStreaming { expanded = true }
+        }
+        .onChange(of: isStreaming) { _, streaming in
+            if streaming { expanded = true }
         }
     }
 }

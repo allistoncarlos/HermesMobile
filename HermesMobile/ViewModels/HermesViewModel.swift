@@ -371,7 +371,7 @@ final class HermesViewModel: ObservableObject {
         let assistant = ChatMessage(role: .assistant, text: "", status: "streaming", isStreaming: true)
         chat.messages.append(assistant)
         chat.lastAssistantIndex = chat.messages.count - 1
-        chat.toolStatusText = attachments.isEmpty ? nil : "Enviando anexos…"
+        chat.toolStatusText = attachments.isEmpty ? "Pensando…" : "Enviando anexos…"
         chat.isStreaming = true
         chat.needsAttention = false
         commit(chat)
@@ -380,7 +380,7 @@ final class HermesViewModel: ObservableObject {
         do {
             let promptText = try await uploadAttachments(attachments, sessionID: chat.id, visibleText: text)
             if var updated = self.chat(for: chat.id) {
-                updated.toolStatusText = nil
+                updated.toolStatusText = "Pensando…"
                 commit(updated)
             }
             _ = try await ws.call(
@@ -406,8 +406,14 @@ final class HermesViewModel: ObservableObject {
 
         var fileRefs: [String] = []
         var hasImage = false
+        let total = attachments.count
 
-        for attachment in attachments {
+        for (index, attachment) in attachments.enumerated() {
+            setToolStatus(
+                sessionID: sessionID,
+                "Enviando \(index + 1)/\(total): \(attachment.filename)…"
+            )
+
             switch attachment.kind {
             case .image:
                 hasImage = true
@@ -608,15 +614,23 @@ final class HermesViewModel: ObservableObject {
 
         case "message.start":
             ensureAssistantBubble(in: &chat)
+            chat.toolStatusText = nil
 
         case "message.delta":
             if let text = event.payload["text"]?.stringValue {
                 appendToAssistant(&chat, text)
+                chat.toolStatusText = nil
             }
 
         case "reasoning.delta":
             if let text = event.payload["text"]?.stringValue {
                 appendReasoning(&chat, text)
+                // Mantém indicação de raciocínio enquanto ainda não há resposta.
+                let assistantTextEmpty: Bool = {
+                    guard let i = chat.lastAssistantIndex, i < chat.messages.count else { return true }
+                    return chat.messages[i].text.isEmpty
+                }()
+                chat.toolStatusText = assistantTextEmpty ? "Raciocinando…" : nil
             }
 
         case "message.complete":
@@ -627,6 +641,7 @@ final class HermesViewModel: ObservableObject {
             markAssistant(&chat, status: status)
             chat.isStreaming = false
             chat.lastAssistantIndex = nil
+            chat.toolStatusText = nil
             if isBackground { chat.needsAttention = true }
             if status == "error" {
                 chat.messages.append(ChatMessage(role: .system, text: "⚠️ O agente reportou um erro."))
@@ -721,6 +736,12 @@ final class HermesViewModel: ObservableObject {
             return
         }
         openChats[i] = chat
+    }
+
+    private func setToolStatus(sessionID: String, _ text: String?) {
+        guard var chat = chat(for: sessionID) else { return }
+        chat.toolStatusText = text
+        commit(chat)
     }
 
     private func clearAttention(for id: String) {
