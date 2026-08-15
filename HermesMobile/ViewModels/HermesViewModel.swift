@@ -25,6 +25,9 @@ final class HermesViewModel: ObservableObject {
     /// Cliente HTTP compartilhado (login, ticket WS, áudio STT/TTS).
     private(set) var httpClient: HermesClient?
     private var usesCookieAuth = false
+    /// Impede `connect()` reentrante (Watch + splash), sem abortar o restore
+    /// que já inicia em `.connecting`.
+    private var connectInFlight = false
 
     /// URL do WebSocket de TTS streaming (mesmo auth do `/api/ws`).
     func makeSpeakStreamURL() async throws -> URL {
@@ -83,7 +86,9 @@ final class HermesViewModel: ObservableObject {
     /// Conecta ao servidor. Se `username`/`password` forem passados e o servidor
     /// exigir auth, faz login cookie-based antes do WebSocket.
     func connect(username: String? = nil, password: String? = nil) async {
-        if case .connecting = connectionState { return }
+        guard !connectInFlight else { return }
+        connectInFlight = true
+        defer { connectInFlight = false }
         connectionState = .connecting
         statusMessage = nil
 
