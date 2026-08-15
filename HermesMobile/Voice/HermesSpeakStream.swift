@@ -171,15 +171,7 @@ final class HermesSpeakStream: NSObject {
         eng.connect(node, to: eng.mainMixerNode, format: format)
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
-            try session.setCategory(
-                .playAndRecord,
-                mode: .default,
-                options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
-            )
-            try session.setActive(true)
-            try? session.overrideOutputAudioPort(.speaker)
+            try HermesAudioSession.activatePlayAndRecord()
             try eng.start()
             node.play()
             engine = eng

@@ -163,6 +163,19 @@ enum SessionCookieStore {
         load().contains { !$0.value.isEmpty && !isExpired($0) }
     }
 
+    /// Snapshot JSON para sincronizar a sessão com o Apple Watch.
+    static func exportData() -> Data? {
+        let live = load().filter { !$0.value.isEmpty && !isExpired($0) }
+        guard !live.isEmpty else { return nil }
+        return try? JSONEncoder().encode(live)
+    }
+
+    static func importData(_ data: Data) {
+        guard let records = try? JSONDecoder().decode([Record].self, from: data) else { return }
+        let live = records.filter { !$0.value.isEmpty && !isExpired($0) }
+        live.isEmpty ? KeychainHelper.save(data: nil, forKey: keychainKey) : save(live)
+    }
+
     static func persist(from storage: HTTPCookieStorage? = HTTPCookieStorage.shared, host: String? = nil) {
         let wantedHost = normalizedHost(host)
         let cookies = (storage?.cookies ?? []).filter { cookie in

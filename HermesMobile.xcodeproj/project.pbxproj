@@ -7,28 +7,71 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		036EB3D39CB7D721749BCC23 /* SpeechSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8D2CEAA61D41E766E3625F /* SpeechSanitizer.swift */; };
 		0A74C5E876873BCAE2D6394A /* HermesWebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DE9BB6C089C619838777230 /* HermesWebSocket.swift */; };
 		27C2246C08EC3E45672FC54A /* VoiceModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7561F4EE215C50A96F72FA1F /* VoiceModeView.swift */; };
 		28609FD8A542C25300A8CA25 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D7A3AFC5752FEA2F727CEC2 /* ServerConfig.swift */; };
+		2907674BE9BF83FAFA43E229 /* CompanionSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF8C8EBEC97C6E2B551C44E2 /* CompanionSync.swift */; };
+		291F34DFCC87F134A4299EB6 /* HermesClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFEF03E9948BA424BB37999 /* HermesClient.swift */; };
+		37F121B6634AAC25F8ACFB2A /* HermesWebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DE9BB6C089C619838777230 /* HermesWebSocket.swift */; };
+		39548FB967B35B1507E9C5EB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 607A951AFB12F9E43471737E /* Assets.xcassets */; };
 		3CC937BB64833FBCEC4257F7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65C06BC1BB85CF96F28E7C6 /* ContentView.swift */; };
 		415B41D3E6722C9A145EEE21 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3C649C9B4BAD6717BFF735EB /* Assets.xcassets */; };
 		43C3CB7D8C822A5D8D738BE8 /* HermesMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870F8ABC8F8D019024E4167E /* HermesMobileApp.swift */; };
 		567C95ED189BAFB3B7E8BF61 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A836EFB22FFF9B932FF43794 /* VoiceRecorder.swift */; };
 		59AEBC46527D302A79A5E549 /* SpeechSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8D2CEAA61D41E766E3625F /* SpeechSanitizer.swift */; };
+		70C70DB5FCA804DA26DCA2DB /* VoiceModeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603377E187F4F9EE681C49A1 /* VoiceModeController.swift */; };
+		796D5BBCF1EDA7ED9109FA80 /* HermesWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963F4EAA5201CCCA0A16705B /* HermesWatchApp.swift */; };
 		8B80B1CCFA68ED00E2E56F07 /* ChatSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF281B15581BEC7E00CDE083 /* ChatSidebarView.swift */; };
+		8CCF05AE232B2CE45A6C897B /* HermesSpeakStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E73FD3959F4856FEFB4DDE /* HermesSpeakStream.swift */; };
 		8E683950496BCF2008074A9A /* VoiceModeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603377E187F4F9EE681C49A1 /* VoiceModeController.swift */; };
+		8FAB62680EEC9DBBB72636A0 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC231C2E4F4DE4B6506DC9BF /* Models.swift */; };
+		A0BCCBE4BD4D06D43E945795 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D7A3AFC5752FEA2F727CEC2 /* ServerConfig.swift */; };
+		A122FAFFC1F52DB84C8AAE60 /* HermesWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CFF3A6A9EEDD9168D5788DF5 /* HermesWatch.app */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A799902C444FD2FEF0370998 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A836EFB22FFF9B932FF43794 /* VoiceRecorder.swift */; };
 		BAC4FEAD410E4C8F488AFB66 /* ServerSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BDD9A6EF521CEC4A4902785 /* ServerSetupView.swift */; };
 		C38B9E47485DBD1257682088 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA02F1D1768D78BF7A95ADFA /* SessionListView.swift */; };
 		C5861B036A6247F92A742372 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC231C2E4F4DE4B6506DC9BF /* Models.swift */; };
+		C9EB6EA5EA929C8A7106B4D1 /* HermesAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 004D63A60AC7EC69C9100019 /* HermesAudioSession.swift */; };
+		D388F914A69C5AC1A9344426 /* WatchVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAFE4C42BBB290587C7A8C74 /* WatchVoiceView.swift */; };
 		D4F90A6D78D5A57DFE7FA4A5 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFA11BB476FC02DF081BA95 /* ChatView.swift */; };
 		D864BD9F7B6A85F01F885570 /* HermesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442ACE60CAD57D4EE61FCCE7 /* HermesViewModel.swift */; };
 		D99C71725E6D7900FC657FAB /* HermesClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFEF03E9948BA424BB37999 /* HermesClient.swift */; };
+		E4E90D701696B76492145E36 /* CompanionSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF8C8EBEC97C6E2B551C44E2 /* CompanionSync.swift */; };
 		E59E7C91932B3FC8D5A63D58 /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0B250E1876201F9F18068A /* MessageBubbleView.swift */; };
+		E6A51AF252A0D8DA06CE488F /* HermesSpeechPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FB9E9956A062A9528E71753 /* HermesSpeechPlayer.swift */; };
+		E7E2987D0B78ADCEF1012420 /* HermesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442ACE60CAD57D4EE61FCCE7 /* HermesViewModel.swift */; };
+		EEDC5896568F5DD332FDEDC3 /* HermesAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 004D63A60AC7EC69C9100019 /* HermesAudioSession.swift */; };
 		FA75FF532E1EBAC30705B328 /* HermesSpeakStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E73FD3959F4856FEFB4DDE /* HermesSpeakStream.swift */; };
 		FF0F4B1908B85FC861613E58 /* HermesSpeechPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FB9E9956A062A9528E71753 /* HermesSpeechPlayer.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		F7D0A4CC00B90CC5C3202F8A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2358AE5B1FB017C5923C2FD9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AB8B4BB791F6F85624BC5693;
+			remoteInfo = HermesWatch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		456C4005DA7D5E9CDCD48B93 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				A122FAFFC1F52DB84C8AAE60 /* HermesWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		004D63A60AC7EC69C9100019 /* HermesAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesAudioSession.swift; sourceTree = "<group>"; };
 		0BDD9A6EF521CEC4A4902785 /* ServerSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSetupView.swift; sourceTree = "<group>"; };
 		0FFA11BB476FC02DF081BA95 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		10E73FD3959F4856FEFB4DDE /* HermesSpeakStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesSpeakStream.swift; sourceTree = "<group>"; };
@@ -36,20 +79,26 @@
 		3C649C9B4BAD6717BFF735EB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3DE9BB6C089C619838777230 /* HermesWebSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWebSocket.swift; sourceTree = "<group>"; };
 		442ACE60CAD57D4EE61FCCE7 /* HermesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesViewModel.swift; sourceTree = "<group>"; };
+		516705AC5EC54EE8E8A42B79 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		5D7A3AFC5752FEA2F727CEC2 /* ServerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerConfig.swift; sourceTree = "<group>"; };
 		603377E187F4F9EE681C49A1 /* VoiceModeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceModeController.swift; sourceTree = "<group>"; };
+		607A951AFB12F9E43471737E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7561F4EE215C50A96F72FA1F /* VoiceModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceModeView.swift; sourceTree = "<group>"; };
 		7FB9E9956A062A9528E71753 /* HermesSpeechPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesSpeechPlayer.swift; sourceTree = "<group>"; };
 		870F8ABC8F8D019024E4167E /* HermesMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesMobileApp.swift; sourceTree = "<group>"; };
+		963F4EAA5201CCCA0A16705B /* HermesWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWatchApp.swift; sourceTree = "<group>"; };
 		9F0B250E1876201F9F18068A /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
 		A836EFB22FFF9B932FF43794 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
 		AF281B15581BEC7E00CDE083 /* ChatSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSidebarView.swift; sourceTree = "<group>"; };
 		BC8D2CEAA61D41E766E3625F /* SpeechSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechSanitizer.swift; sourceTree = "<group>"; };
 		CA02F1D1768D78BF7A95ADFA /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
-		E11909D98B0F5781E0DA91D1 /* HermesMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CFF3A6A9EEDD9168D5788DF5 /* HermesWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DAFE4C42BBB290587C7A8C74 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
+		E11909D98B0F5781E0DA91D1 /* HermesMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HermesMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E65C06BC1BB85CF96F28E7C6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E7429591D4750B1CB9002073 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EC231C2E4F4DE4B6506DC9BF /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		EF8C8EBEC97C6E2B551C44E2 /* CompanionSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSync.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -76,10 +125,21 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		2392268BDFD312D1D6DA1A48 /* HermesWatch */ = {
+			isa = PBXGroup;
+			children = (
+				963F4EAA5201CCCA0A16705B /* HermesWatchApp.swift */,
+				DAFE4C42BBB290587C7A8C74 /* WatchVoiceView.swift */,
+				B3F810BDAF24F89CCFEB3B31 /* Resources */,
+			);
+			path = HermesWatch;
+			sourceTree = "<group>";
+		};
 		2C0E0892137AA72D9468922E /* HermesMobile */ = {
 			isa = PBXGroup;
 			children = (
 				870F8ABC8F8D019024E4167E /* HermesMobileApp.swift */,
+				EB5A8946448CB1F0A78BFFAD /* Companion */,
 				B222BD2536A66028E5EAA0DD /* Config */,
 				D15085901B3994AC7276F642 /* Networking */,
 				11C92F959C91E3D92A137F61 /* Resources */,
@@ -102,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				E11909D98B0F5781E0DA91D1 /* HermesMobile.app */,
+				CFF3A6A9EEDD9168D5788DF5 /* HermesWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -110,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				2C0E0892137AA72D9468922E /* HermesMobile */,
+				2392268BDFD312D1D6DA1A48 /* HermesWatch */,
 				885E8F8307636D94085EA353 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -122,6 +184,15 @@
 			path = Config;
 			sourceTree = "<group>";
 		};
+		B3F810BDAF24F89CCFEB3B31 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				607A951AFB12F9E43471737E /* Assets.xcassets */,
+				516705AC5EC54EE8E8A42B79 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		D15085901B3994AC7276F642 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
@@ -132,9 +203,18 @@
 			path = Networking;
 			sourceTree = "<group>";
 		};
+		EB5A8946448CB1F0A78BFFAD /* Companion */ = {
+			isa = PBXGroup;
+			children = (
+				EF8C8EBEC97C6E2B551C44E2 /* CompanionSync.swift */,
+			);
+			path = Companion;
+			sourceTree = "<group>";
+		};
 		F13BA8220BCD342B9A99E81E /* Voice */ = {
 			isa = PBXGroup;
 			children = (
+				004D63A60AC7EC69C9100019 /* HermesAudioSession.swift */,
 				10E73FD3959F4856FEFB4DDE /* HermesSpeakStream.swift */,
 				7FB9E9956A062A9528E71753 /* HermesSpeechPlayer.swift */,
 				BC8D2CEAA61D41E766E3625F /* SpeechSanitizer.swift */,
@@ -147,16 +227,36 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AB8B4BB791F6F85624BC5693 /* HermesWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DBAA14681101F197C79B39A1 /* Build configuration list for PBXNativeTarget "HermesWatch" */;
+			buildPhases = (
+				630B606858865773795DA4D5 /* Sources */,
+				A7B972EF16FDDAD5B3D6537C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HermesWatch;
+			packageProductDependencies = (
+			);
+			productName = HermesWatch;
+			productReference = CFF3A6A9EEDD9168D5788DF5 /* HermesWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 		E084E7061D97A1CB68FAED6E /* HermesMobile */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D9CFAD2A6811924773EAA436 /* Build configuration list for PBXNativeTarget "HermesMobile" */;
 			buildPhases = (
 				C30EAA427FABE72439E74689 /* Sources */,
 				8E5F38C741065CFEF6FF717A /* Resources */,
+				456C4005DA7D5E9CDCD48B93 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				9F4F5FA3F8873EDCAEA382DE /* PBXTargetDependency */,
 			);
 			name = HermesMobile;
 			packageProductDependencies = (
@@ -174,6 +274,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
+					AB8B4BB791F6F85624BC5693 = {
+						ProvisioningStyle = Automatic;
+					};
 					E084E7061D97A1CB68FAED6E = {
 						ProvisioningStyle = Automatic;
 					};
@@ -194,6 +297,7 @@
 			projectRoot = "";
 			targets = (
 				E084E7061D97A1CB68FAED6E /* HermesMobile */,
+				AB8B4BB791F6F85624BC5693 /* HermesWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -207,16 +311,47 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A7B972EF16FDDAD5B3D6537C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				39548FB967B35B1507E9C5EB /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		630B606858865773795DA4D5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E4E90D701696B76492145E36 /* CompanionSync.swift in Sources */,
+				C9EB6EA5EA929C8A7106B4D1 /* HermesAudioSession.swift in Sources */,
+				291F34DFCC87F134A4299EB6 /* HermesClient.swift in Sources */,
+				8CCF05AE232B2CE45A6C897B /* HermesSpeakStream.swift in Sources */,
+				E6A51AF252A0D8DA06CE488F /* HermesSpeechPlayer.swift in Sources */,
+				E7E2987D0B78ADCEF1012420 /* HermesViewModel.swift in Sources */,
+				796D5BBCF1EDA7ED9109FA80 /* HermesWatchApp.swift in Sources */,
+				37F121B6634AAC25F8ACFB2A /* HermesWebSocket.swift in Sources */,
+				8FAB62680EEC9DBBB72636A0 /* Models.swift in Sources */,
+				A0BCCBE4BD4D06D43E945795 /* ServerConfig.swift in Sources */,
+				036EB3D39CB7D721749BCC23 /* SpeechSanitizer.swift in Sources */,
+				70C70DB5FCA804DA26DCA2DB /* VoiceModeController.swift in Sources */,
+				A799902C444FD2FEF0370998 /* VoiceRecorder.swift in Sources */,
+				D388F914A69C5AC1A9344426 /* WatchVoiceView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C30EAA427FABE72439E74689 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				8B80B1CCFA68ED00E2E56F07 /* ChatSidebarView.swift in Sources */,
 				D4F90A6D78D5A57DFE7FA4A5 /* ChatView.swift in Sources */,
+				2907674BE9BF83FAFA43E229 /* CompanionSync.swift in Sources */,
 				3CC937BB64833FBCEC4257F7 /* ContentView.swift in Sources */,
+				EEDC5896568F5DD332FDEDC3 /* HermesAudioSession.swift in Sources */,
 				D99C71725E6D7900FC657FAB /* HermesClient.swift in Sources */,
 				43C3CB7D8C822A5D8D738BE8 /* HermesMobileApp.swift in Sources */,
 				FA75FF532E1EBAC30705B328 /* HermesSpeakStream.swift in Sources */,
@@ -236,6 +371,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9F4F5FA3F8873EDCAEA382DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AB8B4BB791F6F85624BC5693 /* HermesWatch */;
+			targetProxy = F7D0A4CC00B90CC5C3202F8A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		42430EED93C5DA3BA63225AC /* Release */ = {
@@ -288,13 +431,29 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
+		};
+		66A491724B03CBA0A45C81F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = HermesWatch/Resources/Info.plist;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.hermesmobile.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hermesmobile.app.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
 		};
 		80800FEF16D5AFB6F13AAD75 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -353,13 +512,29 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
+		};
+		A881295C7C3938D6AE3A9957 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = HermesWatch/Resources/Info.plist;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.hermesmobile.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hermesmobile.app.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
 		};
 		B66B3E358307E760AB86E9DC /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -416,6 +591,15 @@
 			buildConfigurations = (
 				B66B3E358307E760AB86E9DC /* Debug */,
 				F2A197B631122A07E5B48F5B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DBAA14681101F197C79B39A1 /* Build configuration list for PBXNativeTarget "HermesWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				66A491724B03CBA0A45C81F4 /* Debug */,
+				A881295C7C3938D6AE3A9957 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

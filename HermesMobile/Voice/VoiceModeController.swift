@@ -64,8 +64,12 @@ final class VoiceModeController: ObservableObject {
     }
 
     func dismiss() {
+        #if os(watchOS)
+        endSession()
+        #else
         isPresented = false
         endSession()
+        #endif
     }
 
     func startSession() async {

@@ -1,6 +1,6 @@
 # HermesMobile
 
-Aplicativo iOS nativo (SwiftUI) para conversar com o seu agente **Hermes Agent** (Nous Research) de qualquer lugar, com cara de ChatGPT — inclusive **várias conversas abertas ao mesmo tempo**.
+Aplicativo iOS nativo (SwiftUI) para conversar com o seu agente **Hermes Agent** (Nous Research) de qualquer lugar, com cara de ChatGPT — inclusive **várias conversas abertas ao mesmo tempo**. No Apple Watch, a conversa é **só por voz**.
 
 O app **não** depende do `hermes-webui` nem de nenhum serviço intermediário: ele fala **direto com o backend HTTP/WebSocket do seu próprio Hermes** (`hermes serve` / `hermes dashboard`, porta 9119 por padrão) usando o mesmo protocolo JSON-RPC que o app desktop e a aba de chat do dashboard utilizam (`/api/ws` + REST `/api/status`).
 
@@ -8,9 +8,10 @@ O app **não** depende do `hermes-webui` nem de nenhum serviço intermediário: 
 
 ## Como abrir
 
-1. Instale o **Xcode** (Xcode 15+; deployment target iOS 17.0).
+1. Instale o **Xcode** (Xcode 15+; deployment target iOS 17.0 / watchOS 10.0).
 2. Abra `HermesMobile.xcodeproj` no Xcode.
-3. Selecione um simulador ou dispositivo e rode o esquema `HermesMobile`.
+3. Selecione um simulador ou dispositivo e rode o esquema `HermesMobile` (o app do Watch é embutido).
+4. Para o Apple Watch: esquema `HermesWatch`, ou um iPhone com o Watch pareado.
 
 O arquivo de projeto é gerado a partir de `project.yml` (via [XcodeGen](https://github.com/yonaskolb/XcodeGen)):
 
@@ -24,16 +25,10 @@ xcodegen generate   # regenera o .xcodeproj depois de tocar no project.yml
 HermesMobile/
 ├── project.yml
 ├── HermesMobile.xcodeproj
-└── HermesMobile/
-    ├── HermesMobileApp.swift
-    ├── Config/ServerConfig.swift      # URL, username, token legado (Keychain)
-    ├── Networking/
-    │   ├── Models.swift
-    │   ├── HermesClient.swift         # REST: status, login, ws-ticket
-    │   └── HermesWebSocket.swift      # JSON-RPC 2.0 via /api/ws
-    ├── ViewModels/HermesViewModel.swift
-    ├── Voice/                         # STT + TTS + loop do modo de voz
-    └── Views/                         # setup, chat, voice, sidebar
+├── HermesMobile/                      # app iOS (chat + voz)
+│   ├── Companion/CompanionSync.swift  # WatchConnectivity → Apple Watch
+│   ├── Config / Networking / Voice / Views
+└── HermesWatch/                       # app watchOS só de voz
 ```
 
 ---
@@ -77,6 +72,18 @@ Conversa hands-free no estilo do **Hermes Desktop 0.20** (botão de waveform):
 6. Volta a ouvir. Diga “parar” / “tchau” para encerrar.
 
 Mesmas rotas de áudio do app desktop — usa o TTS/STT configurados em `~/.hermes/config.yaml`.
+
+### Apple Watch
+
+O companion **Hermes** no Watch é só conversa por voz (sem teclado nem anexos):
+
+1. Conecte no iPhone normalmente (URL + login).
+2. O Watch recebe servidor, token e cookies via WatchConnectivity.
+3. Toque no orb para ouvir → transcreve no Hermes → fala a resposta → volta a ouvir.
+4. Diga “parar” / “tchau”, ou toque no X, para encerrar o turno.
+5. Pedidos de aprovação aparecem com Sim/Não no pulso.
+
+O app do Watch roda de forma independente (`WKRunsIndependentlyOfCompanionApp`): depois da primeira sincronização, Wi-Fi ou LTE no relógio bastam — o iPhone não precisa estar ao lado.
 
 ---
 

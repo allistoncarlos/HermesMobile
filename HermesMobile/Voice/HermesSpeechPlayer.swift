@@ -23,11 +23,7 @@ final class HermesSpeechPlayer: NSObject, ObservableObject, AVAudioPlayerDelegat
     func play(_ audio: SpokenAudio) throws {
         stop(interrupted: false)
 
-        let session = AVAudioSession.sharedInstance()
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
-        try session.setActive(true)
-        try? session.overrideOutputAudioPort(.speaker)
+        try HermesAudioSession.activatePlayAndRecord()
 
         let ext = Self.fileExtension(for: audio.mimeType)
         let url = FileManager.default.temporaryDirectory

@@ -17,7 +17,11 @@ final class VoiceRecorder: NSObject, ObservableObject {
         var errorDescription: String? {
             switch self {
             case .microphoneDenied:
+                #if os(watchOS)
+                return "Permissão de microfone negada. Ative em Ajustes no Apple Watch."
+                #else
                 return "Permissão de microfone negada. Ative em Ajustes → HermesMobile."
+                #endif
             case .noInput:
                 return "Nenhum microfone disponível neste dispositivo."
             case .startFailed(let m):
@@ -52,8 +56,13 @@ final class VoiceRecorder: NSObject, ObservableObject {
     /// Espelha o desktop Hermes (`silenceLevel: 0.075`, `silenceMs: 1250`).
     var speechThreshold: Float = 0.08
     var silenceMs: TimeInterval = 1.25
+    #if os(watchOS)
+    var idleSilenceMs: TimeInterval = 10.0
+    var maxSeconds: TimeInterval = 60
+    #else
     var idleSilenceMs: TimeInterval = 12.0
     var maxSeconds: TimeInterval = 120
+    #endif
 
     static func requestPermission() async -> Bool {
         await withCheckedContinuation { cont in
@@ -171,22 +180,12 @@ final class VoiceRecorder: NSObject, ObservableObject {
     // MARK: - Session / formats
 
     private func configureSession() throws {
+        try HermesAudioSession.activatePlayAndRecord()
+        #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-
-        // Desativa antes de reconfigurar — evita falha quando o player TTS
-        // deixou a sessão em modo spokenAudio.
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
-
-        // `.default` é mais compatível que `.voiceChat` para AVAudioRecorder.
-        try session.setCategory(
-            .playAndRecord,
-            mode: .default,
-            options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
-        )
         try? session.setPreferredSampleRate(44_100)
         try? session.setPreferredIOBufferDuration(0.02)
-        try session.setActive(true)
-        try? session.overrideOutputAudioPort(.speaker)
+        #endif
     }
 
     private struct FormatCandidate {
@@ -196,7 +195,33 @@ final class VoiceRecorder: NSObject, ObservableObject {
     }
 
     private static func formatCandidates() -> [FormatCandidate] {
-        [
+        let aac16 = FormatCandidate(
+            ext: "m4a",
+            mime: "audio/mp4",
+            settings: [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 16_000,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+            ]
+        )
+        let wav16 = FormatCandidate(
+            ext: "wav",
+            mime: "audio/wav",
+            settings: [
+                AVFormatIDKey: Int(kAudioFormatLinearPCM),
+                AVSampleRateKey: 16_000,
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false,
+            ]
+        )
+        #if os(watchOS)
+        return [aac16, wav16]
+        #else
+        return [
             FormatCandidate(
                 ext: "m4a",
                 mime: "audio/mp4",
@@ -207,30 +232,10 @@ final class VoiceRecorder: NSObject, ObservableObject {
                     AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
                 ]
             ),
-            FormatCandidate(
-                ext: "m4a",
-                mime: "audio/mp4",
-                settings: [
-                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                    AVSampleRateKey: 16_000,
-                    AVNumberOfChannelsKey: 1,
-                    AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
-                ]
-            ),
-            FormatCandidate(
-                ext: "wav",
-                mime: "audio/wav",
-                settings: [
-                    AVFormatIDKey: Int(kAudioFormatLinearPCM),
-                    AVSampleRateKey: 16_000,
-                    AVNumberOfChannelsKey: 1,
-                    AVLinearPCMBitDepthKey: 16,
-                    AVLinearPCMIsFloatKey: false,
-                    AVLinearPCMIsBigEndianKey: false,
-                    AVLinearPCMIsNonInterleaved: false,
-                ]
-            ),
+            aac16,
+            wav16,
         ]
+        #endif
     }
 
     private func cleanupOrphanFile() {

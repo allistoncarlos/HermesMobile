@@ -1,26 +1,26 @@
 import SwiftUI
 
 @main
-struct HermesMobileApp: App {
+struct HermesWatchApp: App {
     @StateObject private var viewModel: HermesViewModel
+    @StateObject private var voice = VoiceModeController()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        CompanionSync.shared.activate()
         let config = ServerConfig()
         let vm = HermesViewModel(config: config)
         _viewModel = StateObject(wrappedValue: vm)
-        CompanionSync.shared.activate()
         CompanionSync.shared.bind(vm)
-        CompanionSync.shared.push(config)
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            WatchVoiceView(voice: voice)
                 .environmentObject(viewModel)
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
-                        CompanionSync.shared.push(viewModel.config)
+                        CompanionSync.shared.bind(viewModel)
                     }
                 }
         }

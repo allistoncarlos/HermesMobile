@@ -83,11 +83,13 @@ final class HermesViewModel: ObservableObject {
     /// Conecta ao servidor. Se `username`/`password` forem passados e o servidor
     /// exigir auth, faz login cookie-based antes do WebSocket.
     func connect(username: String? = nil, password: String? = nil) async {
+        if case .connecting = connectionState { return }
         connectionState = .connecting
         statusMessage = nil
 
         guard let base = ServerConfig.normalizedURL(from: config.baseURLString) else {
             connectionState = .failed("Endereço do servidor inválido.")
+            syncCompanion()
             return
         }
 
@@ -109,6 +111,7 @@ final class HermesViewModel: ObservableObject {
             let msg = Self.describeConnectionError(error, base: base)
             statusMessage = msg
             connectionState = .failed(msg)
+            syncCompanion()
             return
         }
 
@@ -126,6 +129,7 @@ final class HermesViewModel: ObservableObject {
                 if user.isEmpty || pass.isEmpty {
                     connectionState = .waitingAuth
                     statusMessage = "Este servidor exige login. Informe usuário e senha."
+                    syncCompanion()
                     return
                 }
                 let provider = passwordProviders.first?.name ?? status.authProviders?.first ?? "basic"
@@ -135,6 +139,7 @@ final class HermesViewModel: ObservableObject {
                 } catch {
                     connectionState = .waitingAuth
                     statusMessage = error.localizedDescription
+                    syncCompanion()
                     return
                 }
             } else if !user.isEmpty {
@@ -145,6 +150,7 @@ final class HermesViewModel: ObservableObject {
             if config.sessionToken.trimmingCharacters(in: .whitespaces).isEmpty {
                 connectionState = .waitingAuth
                 statusMessage = "Este servidor exige um token de sessão (X-Hermes-Session-Token)."
+                syncCompanion()
                 return
             }
         }
@@ -156,11 +162,13 @@ final class HermesViewModel: ObservableObject {
             if usesCookieAuth, Self.isAuthFailure(error) {
                 connectionState = .waitingAuth
                 statusMessage = "Sessão expirada. Informe usuário e senha para entrar de novo."
+                syncCompanion()
                 return
             }
             let msg = Self.describeConnectionError(error, base: base)
             statusMessage = msg
             connectionState = .failed(msg)
+            syncCompanion()
             return
         }
 
@@ -168,6 +176,7 @@ final class HermesViewModel: ObservableObject {
         activeChatID = nil
         await createSession()
         await loadSessions()
+        syncCompanion()
     }
 
     private func openWebSocket(base: URL, client: HermesClient) async throws {
@@ -219,6 +228,14 @@ final class HermesViewModel: ObservableObject {
         self.ws = socket
     }
 
+    #if os(iOS)
+    private func syncCompanion() {
+        CompanionSync.shared.push(config)
+    }
+    #else
+    private func syncCompanion() {}
+    #endif
+
     func disconnect() {
         ws?.disconnect()
         ws = nil
@@ -233,6 +250,7 @@ final class HermesViewModel: ObservableObject {
         SessionCookieStore.clear()
         disconnect()
         statusMessage = "Sessão encerrada."
+        syncCompanion()
     }
 
     // MARK: - Sessões / chats abertos
@@ -253,10 +271,12 @@ final class HermesViewModel: ObservableObject {
                         from: httpClient?.urlSession.configuration.httpCookieStorage,
                         host: httpClient?.baseURL.host
                     )
+                    syncCompanion()
                 }
             }
         } catch {
             connectionState = .failed(error.localizedDescription)
+            syncCompanion()
         }
     }
 
@@ -865,7 +885,11 @@ final class HermesViewModel: ObservableObject {
 
         switch code {
         case .appTransportSecurityRequiresSecureConnection:
+            #if os(watchOS)
+            return "O watchOS bloqueou HTTP (ATS). Confirme NSAllowsArbitraryLoads. URL: \(base.absoluteString)"
+            #else
             return "O iOS bloqueou HTTP (ATS). Confirme que o app foi recompilado com NSAllowsArbitraryLoads. URL: \(base.absoluteString)"
+            #endif
         case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
             return "Não foi possível alcançar \(base.host ?? base.absoluteString). Verifique Tailscale/rede e se o Hermes está no ar."
         case .timedOut:
