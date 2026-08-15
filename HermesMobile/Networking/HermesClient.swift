@@ -4,11 +4,6 @@ import Foundation
 //  Camada HTTP — status, login cookie-based e mint de ticket WebSocket.
 // ============================================================================
 
-struct HermesClientError: Error, LocalizedError {
-    let message: String
-    var errorDescription: String? { message }
-}
-
 final class HermesClient {
 
     let baseURL: URL
@@ -360,12 +355,6 @@ struct AudioSpeakResponse: Decodable {
         case dataURL = "data_url"
         case mimeType = "mime_type"
     }
-}
-
-struct SpokenAudio {
-    let data: Data
-    let mimeType: String
-    let provider: String?
 }
 
 // MARK: - Shared cookie-aware session factory

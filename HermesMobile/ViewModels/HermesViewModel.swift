@@ -86,6 +86,9 @@ final class HermesViewModel: ObservableObject {
     /// Conecta ao servidor. Se `username`/`password` forem passados e o servidor
     /// exigir auth, faz login cookie-based antes do WebSocket.
     func connect(username: String? = nil, password: String? = nil) async {
+        #if os(watchOS)
+        return
+        #else
         guard !connectInFlight else { return }
         connectInFlight = true
         defer { connectInFlight = false }
@@ -182,6 +185,7 @@ final class HermesViewModel: ObservableObject {
         await createSession()
         await loadSessions()
         syncCompanion()
+        #endif
     }
 
     private func openWebSocket(base: URL, client: HermesClient) async throws {
@@ -235,7 +239,7 @@ final class HermesViewModel: ObservableObject {
 
     #if os(iOS)
     private func syncCompanion() {
-        CompanionSync.shared.push(config)
+        CompanionSync.shared.push(from: self)
     }
     #else
     private func syncCompanion() {}
@@ -568,6 +572,7 @@ final class HermesViewModel: ObservableObject {
         guard let ws, var chat = mutableActiveChat(), let approval = chat.pendingApproval else { return }
         chat.pendingApproval = nil
         commit(chat)
+        syncCompanion()
         let choice = allow ? "allow" : "deny"
         do {
             var params: [String: JSONValue] = [
@@ -726,6 +731,9 @@ final class HermesViewModel: ObservableObject {
                 requestID: event.payload["approval_id"]?.stringValue
             )
             if isBackground { chat.needsAttention = true }
+            commit(chat)
+            syncCompanion()
+            return
 
         case "clarify.pending", "clarify.request", "clarify":
             if let text = event.payload["title"]?.stringValue

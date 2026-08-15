@@ -317,6 +317,17 @@ enum ConnectionState: Equatable {
     case failed(String)
 }
 
+struct HermesClientError: Error, LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
+struct SpokenAudio {
+    let data: Data
+    let mimeType: String
+    let provider: String?
+}
+
 // Helper: extrai um texto de um payload JSON.
 extension JSONValue {
     func text(for key: String) -> String? {

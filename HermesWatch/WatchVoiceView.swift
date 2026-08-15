@@ -2,58 +2,59 @@ import SwiftUI
 import WatchKit
 
 // ============================================================================
-//  WatchVoiceView — conversa só por voz no Apple Watch (mesmo loop STT/TTS
-//  do iPhone: transcribe → prompt.submit → speak-stream / speak).
+//  WatchVoiceView — conversa só por voz no Apple Watch.
+//  O relógio não fala com o servidor Hermes (Tailscale/LAN): grava e toca,
+//  e o iPhone faz STT, chat e TTS.
 // ============================================================================
 
 struct WatchVoiceView: View {
     @ObservedObject var voice: VoiceModeController
-    @EnvironmentObject private var vm: HermesViewModel
+    @ObservedObject private var companion = CompanionSync.shared
 
     var body: some View {
         ZStack {
             background
-            switch vm.connectionState {
+            switch displayedConnection {
             case .connected:
                 sessionContent
             case .connecting:
-                statusScreen(title: "Conectando…", detail: vm.config.baseURLString, progress: true)
+                statusScreen(title: "Conectando…", detail: companion.phoneDetail, progress: true)
             case .waitingAuth:
                 statusScreen(
                     title: "Faça login no iPhone",
-                    detail: "Abra o Hermes no iPhone para autenticar. O Watch usa a mesma sessão."
+                    detail: "Abra o Hermes no iPhone para autenticar. O Watch usa a sessão do iPhone."
                 )
             case .failed(let message):
-                statusScreen(title: "Sem conexão", detail: message, retry: true)
+                statusScreen(
+                    title: "iPhone sem conexão",
+                    detail: message,
+                    retry: true
+                )
             case .disconnected:
-                if vm.config.hasSavedConfig {
-                    statusScreen(title: "Desconectado", detail: vm.config.baseURLString, retry: true)
+                if companion.didReceivePhoneState {
+                    statusScreen(
+                        title: "Abra o Hermes no iPhone",
+                        detail: companion.phoneDetail.isEmpty
+                            ? "Conecte no iPhone; o Watch usa essa sessão."
+                            : companion.phoneDetail,
+                        retry: true
+                    )
                 } else {
                     statusScreen(
-                        title: "Configure no iPhone",
-                        detail: "Abra o Hermes no iPhone, conecte ao servidor e o Watch sincroniza sozinho."
+                        title: companion.phoneReachable ? "Aguardando o iPhone…" : "Mantenha o iPhone por perto",
+                        detail: "O Watch não fala sozinho com o servidor — a conversa passa pelo iPhone.",
+                        progress: companion.phoneReachable,
+                        retry: true
                     )
                 }
             }
         }
         .onAppear {
-            voice.attach(vm)
-            CompanionSync.shared.bind(vm)
-            if vm.config.hasSavedConfig {
-                switch vm.connectionState {
-                case .disconnected, .failed:
-                    Task { await vm.connect() }
-                default:
-                    break
-                }
-            }
+            CompanionSync.shared.bind()
         }
-        .onChange(of: vm.connectionState) { _, state in
-            if case .connected = state {
-                // Sessão de voz começa no toque — economiza bateria no pulso.
-            } else {
-                voice.endSession()
-            }
+        .onChange(of: companion.phoneConnection) { _, state in
+            if case .connected = state { return }
+            voice.endSession()
         }
         .onChange(of: voice.phase) { _, phase in
             playHaptic(for: phase)
@@ -61,6 +62,10 @@ struct WatchVoiceView: View {
         .onDisappear {
             voice.endSession()
         }
+    }
+
+    private var displayedConnection: ConnectionState {
+        companion.phoneConnection
     }
 
     // MARK: - Sessão de voz
@@ -89,12 +94,10 @@ struct WatchVoiceView: View {
                 .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity)
 
-            if let approval = vm.pendingApproval {
+            if let approval = companion.pendingApproval {
                 WatchApprovalPanel(approval: approval) { allow in
-                    Task {
-                        await vm.respondApproval(allow: allow)
-                        voice.resumeAfterApproval()
-                    }
+                    CompanionSync.shared.respondApproval(allow: allow)
+                    voice.resumeAfterApproval()
                 }
             } else {
                 controls
@@ -163,7 +166,7 @@ struct WatchVoiceView: View {
             .disabled(!isInSession)
 
             Button {
-                Task { await vm.newSession() }
+                CompanionSync.shared.sendCommand(["cmd": "newSession"], expectReply: true)
             } label: {
                 Image(systemName: "plus.bubble")
                     .font(.system(size: 14, weight: .medium))
@@ -210,7 +213,7 @@ struct WatchVoiceView: View {
                 .lineLimit(5)
             if retry {
                 Button("Tentar") {
-                    Task { await vm.connect() }
+                    CompanionSync.shared.requestPhoneStatus()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color(red: 0.35, green: 0.72, blue: 0.98))

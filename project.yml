@@ -21,8 +21,8 @@ targets:
       path: HermesMobile/Resources/Info.plist
       properties:
         CFBundleDisplayName: HermesMobile
-        CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0.1"
+        CFBundleVersion: "2"
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
@@ -50,20 +50,20 @@ targets:
     deploymentTarget: "10.0"
     sources:
       - path: HermesWatch
-      - path: HermesMobile/Config
-      - path: HermesMobile/Networking
-      - path: HermesMobile/ViewModels
       - path: HermesMobile/Voice
+        excludes:
+          - HermesSpeakStream.swift
       - path: HermesMobile/Companion
+      - path: HermesMobile/Networking/Models.swift
     info:
       path: HermesWatch/Resources/Info.plist
       properties:
         CFBundleDisplayName: Hermes
-        CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0.1"
+        CFBundleVersion: "2"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.hermesmobile.app
-        WKRunsIndependentlyOfCompanionApp: true
+        WKRunsIndependentlyOfCompanionApp: false
         NSMicrophoneUsageDescription: O Hermes usa o microfone do Apple Watch para ouvir suas perguntas.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

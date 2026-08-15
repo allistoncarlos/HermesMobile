@@ -26,10 +26,12 @@ final class VoiceModeController: ObservableObject {
 
     private let recorder = VoiceRecorder()
     private let player = HermesSpeechPlayer()
+    #if os(iOS)
     private weak var vm: HermesViewModel?
+    private var speakStream: HermesSpeakStream?
+    #endif
     private var waitTask: Task<Void, Never>?
     private var levelTask: Task<Void, Never>?
-    private var speakStream: HermesSpeakStream?
     private var isActive = false
     private var turnBusy = false
 
@@ -44,7 +46,9 @@ final class VoiceModeController: ObservableObject {
         case .listening: return "Ouvindo… fale com o Hermes"
         case .transcribing: return "Transcrevendo no Hermes…"
         case .processing:
+            #if os(iOS)
             if let tool = vm?.toolStatusText { return tool }
+            #endif
             return "Hermes pensando…"
         case .speaking: return "Hermes falando…"
         case .error(let m): return m
@@ -53,9 +57,11 @@ final class VoiceModeController: ObservableObject {
 
     // MARK: - Ciclo de vida
 
+    #if os(iOS)
     func attach(_ viewModel: HermesViewModel) {
         vm = viewModel
     }
+    #endif
 
     func present() {
         guard !isPresented else { return }
@@ -83,10 +89,23 @@ final class VoiceModeController: ObservableObject {
             phase = .error("Permissão de microfone negada. Ative em Ajustes.")
             return
         }
+        #if os(watchOS)
+        CompanionSync.shared.requestPhoneStatus()
+        for _ in 0..<10 {
+            if case .connected = CompanionSync.shared.phoneConnection { break }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard case .connected = CompanionSync.shared.phoneConnection else {
+            phase = .error("Abra o Hermes no iPhone e mantenha-o por perto.")
+            isActive = false
+            return
+        }
+        #else
         guard vm?.httpClient != nil else {
             phase = .error("Sem conexão com o servidor Hermes.")
             return
         }
+        #endif
 
         wireCallbacks()
         beginListening()
@@ -102,8 +121,10 @@ final class VoiceModeController: ObservableObject {
         recorder.onSilence = nil
         player.onFinished = nil
         player.onInterrupted = nil
+        #if os(iOS)
         speakStream?.stop()
         speakStream = nil
+        #endif
         _ = recorder.stop(discard: true)
         player.stop(interrupted: false)
         phase = .idle
@@ -118,14 +139,20 @@ final class VoiceModeController: ObservableObject {
         case .listening:
             Task { await finishTurn(force: true) }
         case .speaking:
+            #if os(iOS)
             speakStream?.stop()
             speakStream = nil
+            #endif
             player.stop(interrupted: true)
             beginListening()
         case .processing, .transcribing:
+            #if os(watchOS)
+            CompanionSync.shared.sendCommand(["cmd": "stop"])
+            #else
             Task { await vm?.stopStreaming() }
             speakStream?.stop()
             speakStream = nil
+            #endif
             beginListening()
         case .error:
             Task { await startSession() }
@@ -136,6 +163,11 @@ final class VoiceModeController: ObservableObject {
 
     func resumeAfterApproval() {
         guard isActive else { return }
+        #if os(watchOS)
+        phase = .processing
+        assistantCaption = "Continuando…"
+        return
+        #else
         if case .processing = phase {
             if vm?.isStreaming == true {
                 waitTask?.cancel()
@@ -146,6 +178,7 @@ final class VoiceModeController: ObservableObject {
                 beginListening()
             }
         }
+        #endif
     }
 
     // MARK: - Fluxo
@@ -193,8 +226,10 @@ final class VoiceModeController: ObservableObject {
     private func beginListening() {
         guard isActive else { return }
         waitTask?.cancel()
+        #if os(iOS)
         speakStream?.stop()
         speakStream = nil
+        #endif
         player.stop(interrupted: false)
         _ = recorder.stop(discard: true)
         liveTranscript = ""
@@ -236,6 +271,10 @@ final class VoiceModeController: ObservableObject {
         assistantCaption = ""
         liveTranscript = "…"
 
+        #if os(watchOS)
+        await finishTurnViaPhone(recording)
+        return
+        #else
         guard let client = vm?.httpClient else {
             phase = .error("Sem conexão com o servidor Hermes.")
             turnBusy = false
@@ -276,8 +315,87 @@ final class VoiceModeController: ObservableObject {
                 if isActive { beginListening() }
             }
         }
+        #endif
     }
 
+    #if os(watchOS)
+    private func finishTurnViaPhone(_ recording: VoiceRecorder.Recording) async {
+        let observer = NotificationCenter.default.addObserver(
+            forName: .hermesWatchVoiceEvent,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let payload = note.object as? [String: Any] ?? [:]
+            Task { @MainActor in
+                self?.applyPhoneVoiceEvent(payload)
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        let result = await CompanionSync.shared.sendVoiceTurn(recording: recording)
+        guard isActive else { return }
+
+        switch result {
+        case .audio(let spoken):
+            phase = .speaking
+            do {
+                try player.play(spoken)
+                turnBusy = false
+            } catch {
+                phase = .error(error.localizedDescription)
+                turnBusy = false
+                beginListening()
+            }
+        case .empty:
+            liveTranscript = ""
+            turnBusy = false
+            beginListening()
+        case .stop:
+            turnBusy = false
+            dismiss()
+        case .error(let message):
+            phase = .error(message)
+            turnBusy = false
+            if isActive {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if isActive { beginListening() }
+            }
+        }
+    }
+
+    private func applyPhoneVoiceEvent(_ message: [String: Any]) {
+        guard isActive else { return }
+        switch message["kind"] as? String {
+        case "voice.transcript":
+            if let text = message["text"] as? String {
+                liveTranscript = text
+            }
+            phase = .processing
+        case "voice.caption":
+            if let text = message["text"] as? String {
+                assistantCaption = text
+            }
+            phase = .processing
+        case "voice.phase":
+            let p = message["phase"] as? String
+            if let text = message["text"] as? String, !text.isEmpty {
+                assistantCaption = text
+            }
+            switch p {
+            case "transcribing": phase = .transcribing
+            case "speaking": phase = .speaking
+            default: phase = .processing
+            }
+        case "voice.approval":
+            phase = .processing
+            assistantCaption = message["message"] as? String ?? "Aguardando aprovação…"
+        default:
+            break
+        }
+    }
+    #endif
+
+    #if os(iOS)
     /// Paridade com `use-voice-conversation.ts` → `openLiveSpeech` + fallback.
     private func speakReplyDesktopStyle() async {
         guard isActive, let vm else {
@@ -425,8 +543,9 @@ final class VoiceModeController: ObservableObject {
     private func latestAssistantText(from vm: HermesViewModel) -> String {
         vm.messages.last(where: { $0.role == .assistant && !$0.text.isEmpty })?.text ?? ""
     }
+    #endif
 
-    private static func isStopCommand(_ text: String) -> Bool {
+    static func isStopCommand(_ text: String) -> Bool {
         let normalized = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()

@@ -11,7 +11,7 @@ struct HermesMobileApp: App {
         _viewModel = StateObject(wrappedValue: vm)
         CompanionSync.shared.activate()
         CompanionSync.shared.bind(vm)
-        CompanionSync.shared.push(config)
+        CompanionSync.shared.push(from: vm)
     }
 
     var body: some Scene {
@@ -20,7 +20,7 @@ struct HermesMobileApp: App {
                 .environmentObject(viewModel)
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
-                        CompanionSync.shared.push(viewModel.config)
+                        CompanionSync.shared.push(from: viewModel)
                     }
                 }
         }

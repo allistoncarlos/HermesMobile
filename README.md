@@ -75,15 +75,12 @@ Mesmas rotas de áudio do app desktop — usa o TTS/STT configurados em `~/.herm
 
 ### Apple Watch
 
-O companion **Hermes** no Watch é só conversa por voz (sem teclado nem anexos):
+O companion **Hermes** no Watch é só conversa por voz (sem teclado nem anexos). O relógio **não fala direto com o servidor** (Tailscale/LAN no pulso costuma falhar): ele usa o iPhone como ponte.
 
-1. Conecte no iPhone normalmente (URL + login).
-2. O Watch recebe servidor, token e cookies via WatchConnectivity.
-3. Toque no orb para ouvir → transcreve no Hermes → fala a resposta → volta a ouvir.
-4. Diga “parar” / “tchau”, ou toque no X, para encerrar o turno.
-5. Pedidos de aprovação aparecem com Sim/Não no pulso.
-
-O app do Watch roda de forma independente (`WKRunsIndependentlyOfCompanionApp`): depois da primeira sincronização, Wi-Fi ou LTE no relógio bastam — o iPhone não precisa estar ao lado.
+1. Deixe o Hermes **aberto e conectado no iPhone**, com o Watch por perto.
+2. No pulso, toque no orb para ouvir → o iPhone transcreve, pergunta ao Hermes e devolve a fala.
+3. Diga “parar” / “tchau”, ou toque no X, para encerrar o turno.
+4. Pedidos de aprovação aparecem com Sim/Não no pulso.
 
 ---
 
