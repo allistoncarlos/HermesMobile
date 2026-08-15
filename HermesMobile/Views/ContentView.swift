@@ -12,34 +12,33 @@ struct ContentView: View {
         NavigationStack {
             Group {
                 switch vm.connectionState {
+                case .connected:
+                    ChatView()
                 case .connecting where shouldShowRestoreSplash:
-                    // Evita flash da tela de login ao reabrir o app já autenticado.
+                    restoreSplash
+                case .disconnected where shouldShowRestoreSplash && !didAttemptRestore:
                     restoreSplash
                 case .disconnected, .failed, .waitingAuth, .connecting:
                     ServerSetupView()
-                case .connected:
-                    ChatView()
                 }
             }
         }
         .task {
             guard !didAttemptRestore else { return }
             didAttemptRestore = true
-            guard vm.connectionState == .disconnected,
-                  vm.config.hasSavedConfig else { return }
-            // Sempre tenta reconectar se houver servidor salvo.
-            // `connect()` decide sozinho se precisa de senha/token ou se a sessão cookie ainda vale.
-            await vm.connect()
+            guard vm.config.hasSavedConfig else { return }
+            switch vm.connectionState {
+            case .disconnected, .connecting:
+                await vm.connect()
+            default:
+                break
+            }
         }
     }
 
     /// Splash enquanto restaura sessão salva (cookie, token ou login anterior).
     private var shouldShowRestoreSplash: Bool {
-        vm.config.hasSavedConfig && (
-            vm.config.canRestoreSession
-            || !vm.config.sessionToken.isEmpty
-            || !vm.config.username.isEmpty
-        )
+        vm.config.hasSavedConfig && vm.config.hasRestorableAuth
     }
 
     private var restoreSplash: some View {

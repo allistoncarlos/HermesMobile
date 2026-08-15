@@ -41,6 +41,14 @@ final class HermesViewModel: ObservableObject {
 
     init(config: ServerConfig = ServerConfig()) {
         self.config = config
+        if let url = ServerConfig.normalizedURL(from: config.baseURLString) {
+            SessionCookieStore.restore(for: url)
+        } else {
+            SessionCookieStore.restore()
+        }
+        if config.hasSavedConfig && config.hasRestorableAuth {
+            connectionState = .connecting
+        }
     }
 
     // MARK: - Computed (chat ativo)
@@ -89,6 +97,7 @@ final class HermesViewModel: ObservableObject {
             urlSession: HermesHTTPSession.shared
         )
         httpClient = client
+        client.restorePersistedCookies()
 
         let status: HermesStatus
         do {
@@ -144,6 +153,11 @@ final class HermesViewModel: ObservableObject {
         do {
             try await openWebSocket(base: base, client: client)
         } catch {
+            if usesCookieAuth, Self.isAuthFailure(error) {
+                connectionState = .waitingAuth
+                statusMessage = "Sessão expirada. Informe usuário e senha para entrar de novo."
+                return
+            }
             let msg = Self.describeConnectionError(error, base: base)
             statusMessage = msg
             connectionState = .failed(msg)
@@ -216,6 +230,7 @@ final class HermesViewModel: ObservableObject {
     func logout() async {
         await httpClient?.logout()
         config.canRestoreSession = false
+        SessionCookieStore.clear()
         disconnect()
         statusMessage = "Sessão encerrada."
     }
@@ -234,6 +249,10 @@ final class HermesViewModel: ObservableObject {
                 if !connectionIsError() {
                     connectionState = .connected
                     config.canRestoreSession = true
+                    SessionCookieStore.persist(
+                        from: httpClient?.urlSession.configuration.httpCookieStorage,
+                        host: httpClient?.baseURL.host
+                    )
                 }
             }
         } catch {
@@ -827,6 +846,14 @@ final class HermesViewModel: ObservableObject {
 
     private func connectionIsError() -> Bool {
         if case .failed = connectionState { return true }
+        return false
+    }
+
+    private static func isAuthFailure(_ error: Error) -> Bool {
+        if let hermes = error as? HermesClientError {
+            let msg = hermes.message.lowercased()
+            return msg.contains("sessão expirada") || msg.contains("401")
+        }
         return false
     }
 

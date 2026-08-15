@@ -25,6 +25,7 @@ final class HermesClient {
         self.baseURL = baseURL
         self.sessionToken = sessionToken
         self.urlSession = urlSession
+        restorePersistedCookies()
     }
 
     // MARK: - URL helpers
@@ -49,6 +50,28 @@ final class HermesClient {
         }
     }
 
+    /// Executa o request e persiste cookies de sessão (AT/RT) no Keychain.
+    private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let (data, response) = try await urlSession.data(for: request)
+        captureSessionCookies(from: response, url: request.url ?? baseURL)
+        return (data, response)
+    }
+
+    private func captureSessionCookies(from response: URLResponse, url: URL) {
+        let storage = urlSession.configuration.httpCookieStorage ?? HTTPCookieStorage.shared
+        if let http = response as? HTTPURLResponse {
+            var fields: [String: String] = [:]
+            for (key, value) in http.allHeaderFields {
+                guard let name = key as? String else { continue }
+                fields[name] = String(describing: value)
+            }
+            for cookie in HTTPCookie.cookies(withResponseHeaderFields: fields, for: url) {
+                storage.setCookie(cookie)
+            }
+        }
+        SessionCookieStore.persist(from: storage, host: baseURL.host)
+    }
+
     // MARK: - Status / health
 
     func fetchStatus() async throws -> HermesStatus {
@@ -56,7 +79,7 @@ final class HermesClient {
         request.timeoutInterval = 12
         applyAuthHeaders(to: &request)
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse else {
             throw HermesClientError(message: "Resposta inválida do servidor.")
         }
@@ -69,7 +92,7 @@ final class HermesClient {
     func fetchAuthProviders() async throws -> [AuthProviderInfo] {
         var request = URLRequest(url: try endpoint("/api/auth/providers"))
         request.timeoutInterval = 12
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             return []
         }
@@ -106,7 +129,7 @@ final class HermesClient {
         ]
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse else {
             throw HermesClientError(message: "Resposta inválida no login.")
         }
@@ -127,35 +150,40 @@ final class HermesClient {
     }
 
     /// Verifica se já existe sessão cookie válida (AT ou RT).
-    /// Checa `cookies(for:)` e, como fallback, o jar inteiro filtrado pelo host —
-    /// `cookies(for:)` às vezes falha com diferenças de path/trailing slash.
+    /// Recoloca o Keychain no jar antes de checar — o HTTPCookieStorage
+    /// frequentemente some ao matar o app (session cookie / host IP).
     func hasLiveSessionCookie() -> Bool {
-        let sessionNames: Set<String> = [
-            "hermes_session_at", "__Secure-hermes_session_at", "__Host-hermes_session_at",
-            "hermes_session_rt", "__Secure-hermes_session_rt", "__Host-hermes_session_rt",
-        ]
-        let storage = urlSession.configuration.httpCookieStorage
-        if let cookies = storage?.cookies(for: baseURL),
-           cookies.contains(where: { sessionNames.contains($0.name) }) {
+        restorePersistedCookies()
+        let names = SessionCookieStore.sessionNames
+        let storage = urlSession.configuration.httpCookieStorage ?? HTTPCookieStorage.shared
+        if cookies(in: storage, for: baseURL).contains(where: { names.contains($0.name) && !$0.value.isEmpty }) {
             return true
         }
-        // Fallback sem path trailing: tenta a URL sem barra final.
         if var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) {
             while comps.path.hasSuffix("/") { comps.path.removeLast() }
             if comps.path.isEmpty { comps.path = "/" }
             if let alt = comps.url,
-               let cookies = storage?.cookies(for: alt),
-               cookies.contains(where: { sessionNames.contains($0.name) }) {
+               cookies(in: storage, for: alt).contains(where: { names.contains($0.name) && !$0.value.isEmpty }) {
                 return true
             }
         }
-        guard let host = baseURL.host?.lowercased(), let all = storage?.cookies else {
+        guard let host = baseURL.host?.lowercased(), let all = storage.cookies else {
             return false
         }
         return all.contains { cookie in
-            sessionNames.contains(cookie.name)
-            && cookie.domain.lowercased().hasSuffix(host.trimmingPrefix("."))
+            names.contains(cookie.name)
+            && !cookie.value.isEmpty
+            && SessionCookieStore.hostMatches(cookie.domain, host: host)
         }
+    }
+
+    func restorePersistedCookies() {
+        let storage = urlSession.configuration.httpCookieStorage ?? HTTPCookieStorage.shared
+        SessionCookieStore.restore(into: storage, for: baseURL)
+    }
+
+    private func cookies(in storage: HTTPCookieStorage, for url: URL) -> [HTTPCookie] {
+        storage.cookies(for: url) ?? []
     }
 
     /// Mint de ticket single-use para upgrade WebSocket em modo gated.
@@ -165,7 +193,7 @@ final class HermesClient {
         request.timeoutInterval = 12
         applyAuthHeaders(to: &request)
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse else {
             throw HermesClientError(message: "Resposta inválida ao pedir ticket WS.")
         }
@@ -192,16 +220,16 @@ final class HermesClient {
     }
 
     func clearCookies() {
-        guard let storage = urlSession.configuration.httpCookieStorage else { return }
+        let storage = urlSession.configuration.httpCookieStorage ?? HTTPCookieStorage.shared
         for cookie in storage.cookies(for: baseURL) ?? [] {
             storage.deleteCookie(cookie)
         }
-        // Também limpa variantes globais do jar se existirem.
-        if let all = storage.cookies {
-            for cookie in all where cookie.domain.contains(baseURL.host ?? "") {
+        if let host = baseURL.host, let all = storage.cookies {
+            for cookie in all where SessionCookieStore.hostMatches(cookie.domain, host: host) {
                 storage.deleteCookie(cookie)
             }
         }
+        SessionCookieStore.clear(from: storage, host: baseURL.host)
     }
 
     // MARK: - Áudio nativo (Hermes 0.20+)
@@ -220,7 +248,7 @@ final class HermesClient {
         ]
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse else {
             throw HermesClientError(message: "Resposta inválida na transcrição.")
         }
@@ -269,7 +297,7 @@ final class HermesClient {
         applyAuthHeaders(to: &request)
         request.httpBody = try JSONEncoder().encode(["text": trimmed])
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse else {
             throw HermesClientError(message: "Resposta inválida no TTS.")
         }
