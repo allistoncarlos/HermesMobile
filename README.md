@@ -10,8 +10,9 @@ O app **não** depende do `hermes-webui` nem de nenhum serviço intermediário: 
 
 1. Instale o **Xcode** (Xcode 15+; deployment target iOS 17.0 / watchOS 10.0).
 2. Abra `HermesMobile.xcodeproj` no Xcode.
-3. Selecione um simulador ou dispositivo e rode o esquema `HermesMobile` (o app do Watch é embutido).
-4. Para o Apple Watch: esquema `HermesWatch`, ou um iPhone com o Watch pareado.
+3. Em **Signing & Capabilities**, escolha o **seu** Apple Development Team (o projeto não inclui team ID).
+4. Selecione um simulador ou dispositivo e rode o esquema `HermesMobile` (o app do Watch é embutido).
+5. Para o Apple Watch: esquema `HermesWatch`, ou um iPhone com o Watch pareado.
 
 O arquivo de projeto é gerado a partir de `project.yml` (via [XcodeGen](https://github.com/yonaskolb/XcodeGen)):
 

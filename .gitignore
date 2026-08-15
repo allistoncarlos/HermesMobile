@@ -2,3 +2,7 @@
 *.xcuserstate
 xcuserdata/
 .DS_Store
+*.mobileprovision
+*.p12
+*.ipa
+*.dSYM.zip
