@@ -19,8 +19,15 @@ struct HermesMobileApp: App {
             ContentView()
                 .environmentObject(viewModel)
                 .onChange(of: scenePhase) { _, phase in
+                    #if os(iOS)
+                    BackgroundRuntime.shared.handleScenePhase(phase)
+                    if phase == .background || phase == .inactive {
+                        HermesAudioSession.reassertIfNeeded()
+                    }
+                    #endif
                     if phase == .active {
                         CompanionSync.shared.push(from: viewModel)
+                        HermesAudioSession.reassertIfNeeded()
                     }
                 }
         }

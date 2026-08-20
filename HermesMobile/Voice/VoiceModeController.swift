@@ -34,6 +34,8 @@ final class VoiceModeController: ObservableObject {
     private var levelTask: Task<Void, Never>?
     private var isActive = false
     private var turnBusy = false
+    private var holdingSessionBackground = false
+    private var standaloneSpeakTask: Task<Void, Never>?
 
     private static let stopPhrases: Set<String> = [
         "parar", "pare", "stop", "cancela", "cancelar",
@@ -83,6 +85,10 @@ final class VoiceModeController: ObservableObject {
         isActive = true
         liveTranscript = ""
         assistantCaption = ""
+        #if os(iOS)
+        retainSessionBackground(reason: "Modo voz Hermes")
+        try? HermesAudioSession.activatePlayAndRecord()
+        #endif
 
         let granted = await VoiceRecorder.requestPermission()
         guard granted else {
@@ -118,6 +124,8 @@ final class VoiceModeController: ObservableObject {
         waitTask = nil
         levelTask?.cancel()
         levelTask = nil
+        standaloneSpeakTask?.cancel()
+        standaloneSpeakTask = nil
         recorder.onSilence = nil
         player.onFinished = nil
         player.onInterrupted = nil
@@ -130,7 +138,78 @@ final class VoiceModeController: ObservableObject {
         phase = .idle
         liveTranscript = ""
         audioLevel = 0
+        releaseSessionBackground()
     }
+
+    /// Fala disparada pelo servidor (chat / turno em background) sem abrir o modo voz.
+    /// Se o loop de voz já estiver ativo, ignora (ele mesmo fala a resposta).
+    func speakServerPush(_ text: String) {
+        #if os(watchOS)
+        return
+        #else
+        guard let vm, vm.config.speakRepliesAutomatically else { return }
+        if isActive {
+            switch phase {
+            case .listening, .transcribing, .processing, .speaking:
+                return
+            default:
+                break
+            }
+        }
+        let speakable = SpeechSanitizer.sanitize(text)
+        guard !speakable.isEmpty else { return }
+
+        standaloneSpeakTask?.cancel()
+        standaloneSpeakTask = Task { [weak self] in
+            await self?.speakStandalone(speakable)
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    private func speakStandalone(_ text: String) async {
+        guard let client = vm?.httpClient else { return }
+        retainSessionBackground(reason: "Hermes falando")
+        defer {
+            if !isActive { releaseSessionBackground() }
+        }
+        do {
+            try HermesAudioSession.activatePlayAndRecord()
+            let audio = try await client.speakText(text)
+            guard !Task.isCancelled else { return }
+            try player.play(audio)
+            // Aguarda o fim do áudio sem voltar ao loop de escuta.
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                let previousFinished = player.onFinished
+                let previousInterrupted = player.onInterrupted
+                player.onFinished = {
+                    previousFinished?()
+                    cont.resume()
+                }
+                player.onInterrupted = {
+                    previousInterrupted?()
+                    cont.resume()
+                }
+            }
+        } catch {
+            // Silencioso: falha de TTS no push não deve derrubar o chat.
+        }
+    }
+
+    private func retainSessionBackground(reason: String) {
+        guard !holdingSessionBackground else { return }
+        holdingSessionBackground = true
+        BackgroundRuntime.shared.retain(reason: reason)
+    }
+
+    private func releaseSessionBackground() {
+        guard holdingSessionBackground else { return }
+        holdingSessionBackground = false
+        BackgroundRuntime.shared.release()
+    }
+    #else
+    private func releaseSessionBackground() {}
+    #endif
 
     // MARK: - Controles
 

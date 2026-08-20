@@ -35,6 +35,7 @@ final class HermesSpeakStream: NSObject {
     private var pendingBuffers = 0
     private var pendingSends: [Data] = []
     private var continuation: CheckedContinuation<Outcome, Never>?
+    private var holdingBackground = false
 
     init(url: URL, urlSession: URLSession = HermesHTTPSession.shared) {
         self.url = url
@@ -44,7 +45,8 @@ final class HermesSpeakStream: NSObject {
 
     /// Conecta, processa o stream e resolve quando o áudio terminar (ou fallback).
     func run() async -> Outcome {
-        await withCheckedContinuation { cont in
+        retainBackground()
+        return await withCheckedContinuation { cont in
             self.continuation = cont
             let ws = urlSession.webSocketTask(with: url)
             self.task = ws
@@ -172,10 +174,12 @@ final class HermesSpeakStream: NSObject {
 
         do {
             try HermesAudioSession.activatePlayAndRecord()
+            HermesAudioSession.reassertIfNeeded()
             try eng.start()
             node.play()
             engine = eng
             playerNode = node
+            retainBackground()
         } catch {
             settle(.fallback)
         }
@@ -241,8 +245,21 @@ final class HermesSpeakStream: NSObject {
         playerNode = nil
         engine = nil
         audioFormat = nil
+        releaseBackground()
         let cont = continuation
         continuation = nil
         cont?.resume(returning: outcome)
+    }
+
+    private func retainBackground() {
+        guard !holdingBackground else { return }
+        holdingBackground = true
+        BackgroundRuntime.shared.retain(reason: "Hermes falando")
+    }
+
+    private func releaseBackground() {
+        guard holdingBackground else { return }
+        holdingBackground = false
+        BackgroundRuntime.shared.release()
     }
 }

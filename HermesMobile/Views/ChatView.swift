@@ -41,6 +41,12 @@ struct ChatView: View {
             VoiceModeView(voice: voice)
                 .environmentObject(vm)
         }
+        .onAppear {
+            voice.attach(vm)
+            vm.onAssistantMessageComplete = { text in
+                voice.speakServerPush(text)
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 Button {

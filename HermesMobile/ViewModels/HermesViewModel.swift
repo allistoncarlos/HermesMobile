@@ -22,6 +22,8 @@ final class HermesViewModel: ObservableObject {
     @Published var showSidebar: Bool = false
     /// Só true após logout, “trocar servidor” ou senha inválida — aí a UI de login aparece.
     @Published var needsManualAuth: Bool = false
+    /// Chamado quando o assistente completa uma mensagem (para TTS em background).
+    var onAssistantMessageComplete: ((String) -> Void)?
 
     private var ws: HermesWebSocket?
     /// Cliente HTTP compartilhado (login, ticket WS, áudio STT/TTS).
@@ -830,6 +832,14 @@ final class HermesViewModel: ObservableObject {
             if isBackground { chat.needsAttention = true }
             if status == "error" {
                 chat.messages.append(ChatMessage(role: .system, text: "⚠️ O agente reportou um erro."))
+            } else if config.speakRepliesAutomatically {
+                let spoken = chat.messages.last(where: { $0.role == .assistant })?.text
+                    ?? event.payload["text"]?.stringValue
+                    ?? ""
+                let trimmed = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    onAssistantMessageComplete?(trimmed)
+                }
             }
 
         case "tool.start":

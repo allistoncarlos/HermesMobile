@@ -29,6 +29,10 @@
 	<string>O Hermes usa o microfone no modo de voz para ouvir suas perguntas.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>O Hermes acessa suas fotos para enviar imagens como anexo no chat.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

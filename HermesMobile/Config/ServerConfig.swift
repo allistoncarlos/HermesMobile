@@ -23,6 +23,15 @@ final class ServerConfig: ObservableObject {
         didSet { UserDefaults.standard.set(username, forKey: Keys.username) }
     }
 
+    /// Fala respostas do servidor automaticamente (chat + background), sem pedir de novo.
+    var speakRepliesAutomatically: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Keys.speakAuto) == nil { return true }
+            return UserDefaults.standard.bool(forKey: Keys.speakAuto)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.speakAuto) }
+    }
+
     /// Sessão já estabelecida com sucesso neste dispositivo (para auto-reconnect).
     var canRestoreSession: Bool {
         get { UserDefaults.standard.bool(forKey: Keys.canRestore) }
@@ -36,6 +45,7 @@ final class ServerConfig: ObservableObject {
         /// Legado — senha não é mais persistida; só limpa o Keychain.
         static let password = "hermes.dashboardPassword"
         static let canRestore = "hermes.canRestoreSession"
+        static let speakAuto = "hermes.speakRepliesAutomatically"
     }
 
     init() {
