@@ -78,9 +78,26 @@ final class HermesWebSocket: @unchecked Sendable {
         self.didClose = onClose
         lock.unlock()
         wsTask.resume()
+        startPingLoop()
 
         Task.detached { [weak self] in
             await self?.readLoop()
+        }
+    }
+
+    /// Keepalive: evita idle timeout do proxy/SO enquanto o app está em background.
+    private func startPingLoop() {
+        Task.detached { [weak self] in
+            while true {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard let self else { return }
+                self.lock.lock()
+                let t = self.task
+                let alive = t?.state == .running
+                self.lock.unlock()
+                guard alive, let t else { return }
+                t.sendPing { _ in }
+            }
         }
     }
 

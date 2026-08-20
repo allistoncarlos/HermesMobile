@@ -25,6 +25,15 @@ final class HermesViewModel: ObservableObject {
     /// Chamado quando o assistente completa uma mensagem (para TTS em background).
     var onAssistantMessageComplete: ((String) -> Void)?
 
+    /// App em foreground (atualizado pelo HermesMobileApp via scenePhase).
+    var isAppForeground: Bool = true {
+        didSet {
+            #if os(iOS)
+            HermesNotifier.shared.setForeground(isAppForeground)
+            #endif
+        }
+    }
+
     private var ws: HermesWebSocket?
     /// Cliente HTTP compartilhado (login, ticket WS, áudio STT/TTS).
     private(set) var httpClient: HermesClient?
@@ -34,6 +43,10 @@ final class HermesViewModel: ObservableObject {
     private var connectInFlight = false
     /// Evita loop de reconnect automático em queda de WS.
     private var autoReconnectInFlight = false
+    #if os(iOS)
+    /// Hold de BackgroundRuntime enquanto algum chat está em streaming.
+    private var turnBackgroundHeld = false
+    #endif
 
     /// URL do WebSocket de TTS streaming (mesmo auth do `/api/ws`).
     func makeSpeakStreamURL() async throws -> URL {
@@ -58,6 +71,25 @@ final class HermesViewModel: ObservableObject {
         if config.hasSavedConfig && config.hasRestorableAuth {
             connectionState = .connecting
         }
+        #if os(iOS)
+        HermesNotifier.shared.configure()
+        HermesNotifier.shared.onOpenChat = { [weak self] sessionID in
+            Task { @MainActor in
+                guard let self else { return }
+                if let existing = self.openChats.first(where: {
+                    $0.id == sessionID || $0.storedSessionID == sessionID
+                }) {
+                    await self.selectChat(existing.id)
+                } else {
+                    await self.resumeSession(
+                        SessionSummary(id: sessionID, title: "Conversa", startedAt: nil, source: nil, isActive: false)
+                    )
+                }
+            }
+        }
+        // Touch device id early so Fase 2 registration has a stable id.
+        _ = HermesDeviceIdentity.deviceId
+        #endif
     }
 
     // MARK: - Computed (chat ativo)
@@ -235,6 +267,10 @@ final class HermesViewModel: ObservableObject {
         await createSession()
         await loadSessions()
         syncCompanion()
+        #if os(iOS)
+        await HermesNotifier.shared.requestAuthorizationIfNeeded()
+        syncNotifierContext()
+        #endif
         #endif
     }
 
@@ -347,6 +383,12 @@ final class HermesViewModel: ObservableObject {
                 self.statusMessage = "Conexão com o servidor encerrada."
                 self.syncCompanion()
                 await self.autoReconnectIfPossible()
+                #if os(iOS)
+                // Só alerta se não reconectou — queda por lock/suspend costuma
+                // ser recuperável quando ainda há hold de turno.
+                if case .connected = self.connectionState { return }
+                HermesNotifier.shared.notifyConnectionLost(message: "Conexão com o servidor encerrada.")
+                #endif
             }
         }
         try socket.connect()
@@ -411,6 +453,9 @@ final class HermesViewModel: ObservableObject {
                 let chat = OpenChat(id: sid, storedSessionID: stored, title: "Nova conversa")
                 openChats.append(chat)
                 activeChatID = sid
+                #if os(iOS)
+                syncNotifierContext()
+                #endif
                 if !connectionIsError() {
                     connectionState = .connected
                     if let client = httpClient {
@@ -437,6 +482,9 @@ final class HermesViewModel: ObservableObject {
                 openChats.append(chat)
                 activeChatID = sid
                 showSidebar = false
+                #if os(iOS)
+                syncNotifierContext()
+                #endif
             }
         } catch {
             statusMessage = error.localizedDescription
@@ -448,17 +496,50 @@ final class HermesViewModel: ObservableObject {
         activeChatID = id
         clearAttention(for: id)
         showSidebar = false
+        #if os(iOS)
+        syncNotifierContext()
+        #endif
         // Ativa a sessão no servidor (se suportado).
         if let ws {
             _ = try? await ws.call(method: "session.activate", params: ["session_id": .string(id)])
         }
     }
 
+    #if os(iOS)
+    private func syncNotifierContext() {
+        HermesNotifier.shared.activeChatID = activeChatID
+        HermesNotifier.shared.setForeground(isAppForeground)
+    }
+
+    /// Mantém o processo vivo (áudio + background task) enquanto o agente responde.
+    private func updateTurnBackgroundHold() {
+        let streaming = openChats.contains(where: \.isStreaming)
+        if streaming, !turnBackgroundHeld {
+            BackgroundRuntime.shared.retain(reason: "Hermes processando")
+            turnBackgroundHeld = true
+        } else if !streaming, turnBackgroundHeld {
+            BackgroundRuntime.shared.release()
+            turnBackgroundHeld = false
+        }
+    }
+
+    /// Chamado no lock / background: reforça o hold se ainda há turno aberto.
+    func ensureBackgroundHoldForActiveTurns() {
+        updateTurnBackgroundHold()
+        if turnBackgroundHeld {
+            HermesAudioSession.reassertIfNeeded()
+        }
+    }
+    #endif
+
     func closeChat(_ id: String) {
         openChats.removeAll { $0.id == id }
         if activeChatID == id {
             activeChatID = openChats.first?.id
         }
+        #if os(iOS)
+        syncNotifierContext()
+        #endif
     }
 
     func loadSessions() async {
@@ -531,6 +612,9 @@ final class HermesViewModel: ObservableObject {
             }
             activeChatID = sid
             showSidebar = false
+            #if os(iOS)
+            syncNotifierContext()
+            #endif
             _ = try? await ws.call(method: "session.activate", params: ["session_id": .string(sid)])
         } catch {
             statusMessage = "Erro ao abrir a conversa: \(error.localizedDescription)"
@@ -832,13 +916,29 @@ final class HermesViewModel: ObservableObject {
             if isBackground { chat.needsAttention = true }
             if status == "error" {
                 chat.messages.append(ChatMessage(role: .system, text: "⚠️ O agente reportou um erro."))
-            } else if config.speakRepliesAutomatically {
+                #if os(iOS)
+                HermesNotifier.shared.notifyError(
+                    sessionID: sessionID,
+                    message: "O agente reportou um erro."
+                )
+                #endif
+            } else {
                 let spoken = chat.messages.last(where: { $0.role == .assistant })?.text
                     ?? event.payload["text"]?.stringValue
                     ?? ""
                 let trimmed = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
-                    onAssistantMessageComplete?(trimmed)
+                    if config.speakRepliesAutomatically {
+                        onAssistantMessageComplete?(trimmed)
+                    }
+                    #if os(iOS)
+                    let title = chat.title.isEmpty ? "Hermes" : chat.title
+                    HermesNotifier.shared.notifyReplyReady(
+                        sessionID: sessionID,
+                        title: title,
+                        body: trimmed
+                    )
+                    #endif
                 }
             }
 
@@ -877,19 +977,29 @@ final class HermesViewModel: ObservableObject {
                 requestID: event.payload["approval_id"]?.stringValue
             )
             if isBackground { chat.needsAttention = true }
+            #if os(iOS)
+            HermesNotifier.shared.notifyApproval(sessionID: sessionID, message: message)
+            #endif
             commit(chat)
             syncCompanion()
             return
 
         case "clarify.pending", "clarify.request", "clarify":
-            if let text = event.payload["title"]?.stringValue
+            let clarifyText = event.payload["title"]?.stringValue
                 ?? event.payload["prompt"]?.stringValue
-                ?? event.payload["message"]?.stringValue {
+                ?? event.payload["message"]?.stringValue
+            if let text = clarifyText {
                 chat.messages.append(ChatMessage(role: .system, text: "❓ \(text)"))
             }
             chat.pendingClarifyID = event.payload["clarify_id"]?.stringValue
             chat.hasPendingClarify = true
             if isBackground { chat.needsAttention = true }
+            #if os(iOS)
+            HermesNotifier.shared.notifyClarify(
+                sessionID: sessionID,
+                message: clarifyText ?? "O Hermes precisa de uma resposta."
+            )
+            #endif
 
         case "error", "turn.error":
             let msg = event.payload["message"]?.stringValue ?? "Erro no agente."
@@ -898,6 +1008,9 @@ final class HermesViewModel: ObservableObject {
             chat.messages.append(ChatMessage(role: .system, text: "⚠️ \(msg)"))
             if isBackground { chat.needsAttention = true }
             else { statusMessage = msg }
+            #if os(iOS)
+            HermesNotifier.shared.notifyError(sessionID: sessionID, message: msg)
+            #endif
 
         case "session.complete", "turn.end":
             chat.isStreaming = false
@@ -931,9 +1044,15 @@ final class HermesViewModel: ObservableObject {
     private func commit(_ chat: OpenChat) {
         guard let i = chatIndex(for: chat.id) else {
             openChats.append(chat)
+            #if os(iOS)
+            updateTurnBackgroundHold()
+            #endif
             return
         }
         openChats[i] = chat
+        #if os(iOS)
+        updateTurnBackgroundHold()
+        #endif
     }
 
     private func setToolStatus(sessionID: String, _ text: String?) {

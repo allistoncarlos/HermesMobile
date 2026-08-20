@@ -24,11 +24,23 @@ struct HermesMobileApp: App {
                     if phase == .background || phase == .inactive {
                         HermesAudioSession.reassertIfNeeded()
                     }
-                    #endif
+                    let foreground = (phase == .active)
+                    viewModel.isAppForeground = foreground
+                    HermesNotifier.shared.setForeground(foreground)
+                    HermesNotifier.shared.activeChatID = viewModel.activeChatID
+                    if phase == .background || phase == .inactive {
+                        viewModel.ensureBackgroundHoldForActiveTurns()
+                    }
                     if phase == .active {
                         CompanionSync.shared.push(from: viewModel)
                         HermesAudioSession.reassertIfNeeded()
                     }
+                    #endif
+                }
+                .onChange(of: viewModel.activeChatID) { _, id in
+                    #if os(iOS)
+                    HermesNotifier.shared.activeChatID = id
+                    #endif
                 }
         }
     }
