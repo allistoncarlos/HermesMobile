@@ -33,6 +33,8 @@ final class ServerConfig: ObservableObject {
         static let baseURL  = "hermes.serverBaseURL"
         static let token    = "hermes.sessionToken"
         static let username = "hermes.username"
+        /// Legado — senha não é mais persistida; só limpa o Keychain.
+        static let password = "hermes.dashboardPassword"
         static let canRestore = "hermes.canRestoreSession"
     }
 
@@ -40,7 +42,9 @@ final class ServerConfig: ObservableObject {
         self.baseURLString = UserDefaults.standard.string(forKey: Keys.baseURL) ?? ""
         self.sessionToken  = KeychainHelper.read(key: Keys.token) ?? ""
         self.username      = UserDefaults.standard.string(forKey: Keys.username) ?? ""
-        // Recoloca cookies de sessão no jar HTTP antes de qualquer request.
+        // Migração: remove senha que versões anteriores guardavam no Keychain.
+        KeychainHelper.save(token: "", forKey: Keys.password)
+        // Recoloca cookies de sessão (AT/RT) no jar HTTP antes de qualquer request.
         if let url = Self.normalizedURL(from: baseURLString) {
             SessionCookieStore.restore(for: url)
         } else {
@@ -77,15 +81,15 @@ final class ServerConfig: ObservableObject {
         sessionToken = ""
         username = ""
         canRestoreSession = false
+        KeychainHelper.save(token: "", forKey: Keys.password)
         SessionCookieStore.clear()
     }
 
-    /// Há credencial local suficiente para tentar reentrar sem pedir senha.
+    /// Credenciais locais suficientes para reentrar sem pedir senha (cookies AT/RT ou token legado).
     var hasRestorableAuth: Bool {
         canRestoreSession
             || SessionCookieStore.hasPersistedCookies
             || !sessionToken.trimmingCharacters(in: .whitespaces).isEmpty
-            || !username.trimmingCharacters(in: .whitespaces).isEmpty
     }
 }
 
@@ -149,6 +153,16 @@ enum SessionCookieStore {
         "hermes_session_provider", "__Secure-hermes_session_provider", "__Host-hermes_session_provider",
     ]
 
+    private static let accessTokenNames: Set<String> = [
+        "hermes_session_at", "__Secure-hermes_session_at", "__Host-hermes_session_at",
+    ]
+    private static let refreshTokenNames: Set<String> = [
+        "hermes_session_rt", "__Secure-hermes_session_rt", "__Host-hermes_session_rt",
+    ]
+    private static let providerNames: Set<String> = [
+        "hermes_session_provider", "__Secure-hermes_session_provider", "__Host-hermes_session_provider",
+    ]
+
     private struct Record: Codable {
         var name: String
         var value: String
@@ -161,6 +175,79 @@ enum SessionCookieStore {
 
     static var hasPersistedCookies: Bool {
         load().contains { !$0.value.isEmpty && !isExpired($0) }
+    }
+
+    static var hasPersistedRefreshToken: Bool {
+        load().contains {
+            refreshTokenNames.contains($0.name) && !$0.value.isEmpty && !isExpired($0)
+        }
+    }
+
+    /// Valor atual do refresh token (cookie ou Keychain).
+    static func refreshTokenValue() -> String? {
+        let live = load().first {
+            refreshTokenNames.contains($0.name) && !$0.value.isEmpty && !isExpired($0)
+        }
+        return live?.value
+    }
+
+    static func providerHint() -> String? {
+        load().first {
+            providerNames.contains($0.name) && !$0.value.isEmpty && !isExpired($0)
+        }?.value
+    }
+
+    /// Grava AT/RT devolvidos por `POST /auth/native/refresh` no jar + Keychain.
+    static func applyNativeTokens(
+        accessToken: String,
+        refreshToken: String,
+        expiresAt: TimeInterval?,
+        provider: String?,
+        into storage: HTTPCookieStorage? = HTTPCookieStorage.shared,
+        for url: URL
+    ) {
+        guard let storage else { return }
+        let host = url.host ?? ""
+        let path = "/"
+        let atExpires = expiresAt ?? Date().addingTimeInterval(12 * 60 * 60).timeIntervalSince1970
+        let rtExpires = Date().addingTimeInterval(localFallbackTTL).timeIntervalSince1970
+        let secure = url.scheme?.lowercased() == "https"
+
+        func setCookie(name: String, value: String, expires: TimeInterval) {
+            var props: [HTTPCookiePropertyKey: Any] = [
+                .name: name,
+                .value: value,
+                .path: path,
+                .originURL: url,
+                .expires: Date(timeIntervalSince1970: expires),
+                .maximumAge: String(max(0, Int(expires - Date().timeIntervalSince1970))),
+            ]
+            if !host.isEmpty { props[.domain] = host }
+            if secure { props[.secure] = "TRUE" }
+            props[HTTPCookiePropertyKey("HttpOnly")] = "TRUE"
+            if let cookie = HTTPCookie(properties: props) {
+                storage.setCookie(cookie)
+            }
+        }
+
+        // Remove variantes antigas do mesmo host antes de gravar bare names.
+        for cookie in storage.cookies ?? [] {
+            let isOurs = accessTokenNames.contains(cookie.name)
+                || refreshTokenNames.contains(cookie.name)
+                || providerNames.contains(cookie.name)
+            if isOurs, hostMatches(cookie.domain, host: host.lowercased()) {
+                storage.deleteCookie(cookie)
+            }
+        }
+
+        setCookie(name: "hermes_session_at", value: accessToken, expires: atExpires)
+        if !refreshToken.isEmpty {
+            setCookie(name: "hermes_session_rt", value: refreshToken, expires: rtExpires)
+        }
+        if let provider, !provider.isEmpty {
+            setCookie(name: "hermes_session_provider", value: provider, expires: rtExpires)
+        }
+        persist(from: storage, host: host)
     }
 
     /// Snapshot JSON para sincronizar a sessão com o Apple Watch.

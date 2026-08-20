@@ -20,6 +20,8 @@ final class HermesViewModel: ObservableObject {
     @Published var authRequired: Bool = false
     @Published var passwordProviders: [AuthProviderInfo] = []
     @Published var showSidebar: Bool = false
+    /// Só true após logout, “trocar servidor” ou senha inválida — aí a UI de login aparece.
+    @Published var needsManualAuth: Bool = false
 
     private var ws: HermesWebSocket?
     /// Cliente HTTP compartilhado (login, ticket WS, áudio STT/TTS).
@@ -28,6 +30,8 @@ final class HermesViewModel: ObservableObject {
     /// Impede `connect()` reentrante (Watch + splash), sem abortar o restore
     /// que já inicia em `.connecting`.
     private var connectInFlight = false
+    /// Evita loop de reconnect automático em queda de WS.
+    private var autoReconnectInFlight = false
 
     /// URL do WebSocket de TTS streaming (mesmo auth do `/api/ws`).
     func makeSpeakStreamURL() async throws -> URL {
@@ -83,8 +87,8 @@ final class HermesViewModel: ObservableObject {
 
     // MARK: - Conexão
 
-    /// Conecta ao servidor. Se `username`/`password` forem passados e o servidor
-    /// exigir auth, faz login cookie-based antes do WebSocket.
+    /// Conecta ao servidor. Com cookies AT/RT salvos, renova via refresh token.
+    /// Senha só é usada no momento do login (não é persistida).
     func connect(username: String? = nil, password: String? = nil) async {
         #if os(watchOS)
         return
@@ -95,8 +99,14 @@ final class HermesViewModel: ObservableObject {
         connectionState = .connecting
         statusMessage = nil
 
+        if let username {
+            let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { config.username = trimmed }
+        }
+
         guard let base = ServerConfig.normalizedURL(from: config.baseURLString) else {
             connectionState = .failed("Endereço do servidor inválido.")
+            needsManualAuth = true
             syncCompanion()
             return
         }
@@ -132,30 +142,64 @@ final class HermesViewModel: ObservableObject {
 
             let user = (username ?? config.username).trimmingCharacters(in: .whitespacesAndNewlines)
             let pass = password ?? ""
+            let provider = passwordProviders.first?.name ?? status.authProviders?.first ?? "basic"
 
-            if !client.hasLiveSessionCookie() {
-                if user.isEmpty || pass.isEmpty {
+            if client.hasLiveSessionCookie() || client.hasLiveRefreshToken() {
+                do {
+                    try await client.ensureFreshSession()
+                    markSessionRestorable(client: client)
+                } catch {
+                    if Self.isAuthFailure(error) {
+                        // RT morto — tenta login com senha desta vez, se o usuário digitou.
+                        if user.isEmpty || pass.isEmpty {
+                            needsManualAuth = true
+                            connectionState = .waitingAuth
+                            statusMessage = "Sessão expirada. Informe usuário e senha para entrar de novo."
+                            syncCompanion()
+                            return
+                        }
+                        do {
+                            _ = try await client.login(username: user, password: pass, provider: provider)
+                            if !user.isEmpty { config.username = user }
+                            markSessionRestorable(client: client)
+                        } catch {
+                            needsManualAuth = true
+                            connectionState = .waitingAuth
+                            statusMessage = error.localizedDescription
+                            syncCompanion()
+                            return
+                        }
+                    } else {
+                        let msg = Self.describeConnectionError(error, base: base)
+                        statusMessage = msg
+                        connectionState = .failed(msg)
+                        syncCompanion()
+                        return
+                    }
+                }
+            } else {
+                guard !user.isEmpty, !pass.isEmpty else {
+                    needsManualAuth = true
                     connectionState = .waitingAuth
                     statusMessage = "Este servidor exige login. Informe usuário e senha."
                     syncCompanion()
                     return
                 }
-                let provider = passwordProviders.first?.name ?? status.authProviders?.first ?? "basic"
                 do {
                     _ = try await client.login(username: user, password: pass, provider: provider)
                     config.username = user
+                    markSessionRestorable(client: client)
                 } catch {
+                    needsManualAuth = true
                     connectionState = .waitingAuth
                     statusMessage = error.localizedDescription
                     syncCompanion()
                     return
                 }
-            } else if !user.isEmpty {
-                config.username = user
             }
         } else if status.authRequired == true {
-            // Auth exigida mas sem fluxo cookie (token legado).
             if config.sessionToken.trimmingCharacters(in: .whitespaces).isEmpty {
+                needsManualAuth = true
                 connectionState = .waitingAuth
                 statusMessage = "Este servidor exige um token de sessão (X-Hermes-Session-Token)."
                 syncCompanion()
@@ -163,29 +207,96 @@ final class HermesViewModel: ObservableObject {
             }
         }
 
-        // Abre o WebSocket (ticket em modo gated, token legado caso contrário).
         do {
             try await openWebSocket(base: base, client: client)
         } catch {
             if usesCookieAuth, Self.isAuthFailure(error) {
-                connectionState = .waitingAuth
-                statusMessage = "Sessão expirada. Informe usuário e senha para entrar de novo."
+                let recovered = await refreshCookieSessionAndOpenSocket(
+                    base: base,
+                    client: client,
+                    username: username,
+                    password: password
+                )
+                if !recovered { return }
+            } else {
+                let msg = Self.describeConnectionError(error, base: base)
+                statusMessage = msg
+                connectionState = .failed(msg)
                 syncCompanion()
                 return
             }
-            let msg = Self.describeConnectionError(error, base: base)
-            statusMessage = msg
-            connectionState = .failed(msg)
-            syncCompanion()
-            return
         }
 
+        needsManualAuth = false
         openChats = []
         activeChatID = nil
         await createSession()
         await loadSessions()
         syncCompanion()
         #endif
+    }
+
+    /// AT/ticket expirado: renova com RT (`/auth/native/refresh`). Senha só se o RT morreu.
+    @discardableResult
+    private func refreshCookieSessionAndOpenSocket(
+        base: URL,
+        client: HermesClient,
+        username: String? = nil,
+        password: String? = nil
+    ) async -> Bool {
+        if client.hasLiveRefreshToken() {
+            do {
+                _ = try await client.refreshSession()
+                markSessionRestorable(client: client)
+                try await openWebSocket(base: base, client: client)
+                return true
+            } catch {
+                if !Self.isAuthFailure(error) {
+                    let msg = Self.describeConnectionError(error, base: base)
+                    statusMessage = msg
+                    connectionState = .failed(msg)
+                    syncCompanion()
+                    return false
+                }
+                // RT rejeitado — cai para senha se disponível nesta tentativa.
+            }
+        }
+
+        let user = (username ?? config.username).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pass = password ?? ""
+        guard !user.isEmpty, !pass.isEmpty else {
+            needsManualAuth = true
+            connectionState = .waitingAuth
+            statusMessage = "Sessão expirada. Informe usuário e senha para entrar de novo."
+            syncCompanion()
+            return false
+        }
+
+        let provider = passwordProviders.first?.name ?? "basic"
+        do {
+            client.clearCookies()
+            _ = try await client.login(username: user, password: pass, provider: provider)
+            config.username = user
+            markSessionRestorable(client: client)
+            try await openWebSocket(base: base, client: client)
+            return true
+        } catch {
+            needsManualAuth = true
+            connectionState = .waitingAuth
+            statusMessage = Self.isInvalidCredentials(error)
+                ? error.localizedDescription
+                : "Sessão expirada. Informe usuário e senha para entrar de novo."
+            syncCompanion()
+            return false
+        }
+    }
+
+    private func markSessionRestorable(client: HermesClient) {
+        config.canRestoreSession = true
+        SessionCookieStore.persist(
+            from: client.urlSession.configuration.httpCookieStorage,
+            host: client.baseURL.host
+        )
     }
 
     private func openWebSocket(base: URL, client: HermesClient) async throws {
@@ -201,8 +312,10 @@ final class HermesViewModel: ObservableObject {
 
         var tokenForHeader: String? = nil
         if usesCookieAuth {
+            try await client.ensureFreshSession()
             let ticket = try await client.mintWsTicket()
             comps.queryItems = [URLQueryItem(name: "ticket", value: ticket)]
+            markSessionRestorable(client: client)
         } else {
             comps.queryItems = nil
             let tok = config.sessionToken.trimmingCharacters(in: .whitespaces)
@@ -227,14 +340,27 @@ final class HermesViewModel: ObservableObject {
         socket.onClose = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                if self.connectionState == .connected || self.connectionState == .connecting {
-                    self.connectionState = .disconnected
-                    self.statusMessage = "Conexão com o servidor encerrada."
-                }
+                guard self.connectionState == .connected || self.connectionState == .connecting else { return }
+                self.connectionState = .disconnected
+                self.statusMessage = "Conexão com o servidor encerrada."
+                self.syncCompanion()
+                await self.autoReconnectIfPossible()
             }
         }
         try socket.connect()
         self.ws = socket
+    }
+
+    /// Reconecta sozinho após queda de rede — sem voltar à tela de login.
+    private func autoReconnectIfPossible() async {
+        guard !needsManualAuth else { return }
+        guard config.hasSavedConfig, config.hasRestorableAuth else { return }
+        guard !autoReconnectInFlight, !connectInFlight else { return }
+        autoReconnectInFlight = true
+        defer { autoReconnectInFlight = false }
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        guard connectionState == .disconnected || connectionState.isFailed else { return }
+        await connect()
     }
 
     #if os(iOS)
@@ -253,12 +379,22 @@ final class HermesViewModel: ObservableObject {
         activeChatID = nil
     }
 
+    /// Sai e limpa cookies/tokens — única forma de voltar ao formulário de login de propósito.
     func logout() async {
         await httpClient?.logout()
         config.canRestoreSession = false
         SessionCookieStore.clear()
+        needsManualAuth = true
         disconnect()
         statusMessage = "Sessão encerrada."
+        syncCompanion()
+    }
+
+    /// Abre o setup para trocar servidor.
+    func presentServerSetup() {
+        disconnect()
+        needsManualAuth = true
+        statusMessage = nil
         syncCompanion()
     }
 
@@ -275,11 +411,11 @@ final class HermesViewModel: ObservableObject {
                 activeChatID = sid
                 if !connectionIsError() {
                     connectionState = .connected
-                    config.canRestoreSession = true
-                    SessionCookieStore.persist(
-                        from: httpClient?.urlSession.configuration.httpCookieStorage,
-                        host: httpClient?.baseURL.host
-                    )
+                    if let client = httpClient {
+                        markSessionRestorable(client: client)
+                    } else {
+                        config.canRestoreSession = true
+                    }
                     syncCompanion()
                 }
             }
@@ -886,6 +1022,14 @@ final class HermesViewModel: ObservableObject {
         if let hermes = error as? HermesClientError {
             let msg = hermes.message.lowercased()
             return msg.contains("sessão expirada") || msg.contains("401")
+        }
+        return false
+    }
+
+    private static func isInvalidCredentials(_ error: Error) -> Bool {
+        if let hermes = error as? HermesClientError {
+            let msg = hermes.message.lowercased()
+            return msg.contains("usuário ou senha") || msg.contains("inválid")
         }
         return false
     }

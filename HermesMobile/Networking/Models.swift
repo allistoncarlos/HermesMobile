@@ -262,6 +262,23 @@ struct PasswordLoginResponse: Decodable {
     let next: String?
 }
 
+/// Resposta do POST /auth/native/refresh (rotação AT/RT para apps nativos).
+struct NativeRefreshResponse: Decodable {
+    let accessToken: String
+    let refreshToken: String?
+    let expiresAt: TimeInterval?
+    let provider: String?
+    let userId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case expiresAt = "expires_at"
+        case provider
+        case userId = "user_id"
+    }
+}
+
 /// Resposta de GET /api/auth/providers.
 struct AuthProvidersResponse: Decodable {
     let providers: [AuthProviderInfo]
@@ -315,6 +332,16 @@ enum ConnectionState: Equatable {
     case connected
     case waitingAuth
     case failed(String)
+
+    var isFailed: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+
+    var failureMessage: String? {
+        if case .failed(let msg) = self { return msg }
+        return nil
+    }
 }
 
 struct HermesClientError: Error, LocalizedError {

@@ -81,7 +81,7 @@ struct ChatView: View {
                         Label("Sair", systemImage: "rectangle.portrait.and.arrow.right")
                     }
                     Button(role: .destructive) {
-                        vm.disconnect()
+                        vm.presentServerSetup()
                     } label: {
                         Label("Trocar de servidor", systemImage: "network")
                     }

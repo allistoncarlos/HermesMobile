@@ -163,6 +163,7 @@ struct ServerSetupView: View {
         .onAppear {
             urlText = vm.serverAddress
             username = vm.config.username
+            password = ""
             token = vm.config.sessionToken
         }
     }
@@ -184,6 +185,10 @@ struct ServerSetupView: View {
         vm.config.baseURLString = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
         vm.config.sessionToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        await vm.connect(username: user.isEmpty ? nil : user, password: password.isEmpty ? nil : password)
+        // Senha só viaja nesta tentativa — nunca vai para o Keychain.
+        await vm.connect(
+            username: user.isEmpty ? nil : user,
+            password: password.isEmpty ? nil : password
+        )
     }
 }

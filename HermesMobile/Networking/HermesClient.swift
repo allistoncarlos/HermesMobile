@@ -149,7 +149,21 @@ final class HermesClient {
     /// frequentemente some ao matar o app (session cookie / host IP).
     func hasLiveSessionCookie() -> Bool {
         restorePersistedCookies()
-        let names = SessionCookieStore.sessionNames
+        return sessionCookiePresent(matching: SessionCookieStore.sessionNames)
+    }
+
+    /// Há refresh token vivo (cookie ou Keychain) — base do re-login sem senha.
+    func hasLiveRefreshToken() -> Bool {
+        restorePersistedCookies()
+        if let rt = SessionCookieStore.refreshTokenValue(), !rt.isEmpty {
+            return true
+        }
+        return sessionCookiePresent(matching: [
+            "hermes_session_rt", "__Secure-hermes_session_rt", "__Host-hermes_session_rt",
+        ])
+    }
+
+    private func sessionCookiePresent(matching names: Set<String>) -> Bool {
         let storage = urlSession.configuration.httpCookieStorage ?? HTTPCookieStorage.shared
         if cookies(in: storage, for: baseURL).contains(where: { names.contains($0.name) && !$0.value.isEmpty }) {
             return true
@@ -179,6 +193,67 @@ final class HermesClient {
 
     private func cookies(in storage: HTTPCookieStorage, for url: URL) -> [HTTPCookie] {
         storage.cookies(for: url) ?? []
+    }
+
+    /// Rotaciona AT/RT via `POST /auth/native/refresh` (mesmo contrato do Hermes Desktop).
+    @discardableResult
+    func refreshSession() async throws -> NativeRefreshResponse {
+        restorePersistedCookies()
+        guard let refreshToken = SessionCookieStore.refreshTokenValue(), !refreshToken.isEmpty else {
+            throw HermesClientError(message: "Sessão expirada. Faça login novamente.")
+        }
+        let provider = SessionCookieStore.providerHint() ?? ""
+
+        var request = URLRequest(url: try endpoint("/auth/native/refresh"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        struct Body: Encodable {
+            let refresh_token: String
+            let provider: String
+        }
+        request.httpBody = try JSONEncoder().encode(Body(refresh_token: refreshToken, provider: provider))
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw HermesClientError(message: "Resposta inválida no refresh.")
+        }
+        switch http.statusCode {
+        case 200..<300:
+            let decoded = try JSONDecoder().decode(NativeRefreshResponse.self, from: data)
+            guard !decoded.accessToken.isEmpty else {
+                throw HermesClientError(message: "Refresh retornou access token vazio.")
+            }
+            let storage = urlSession.configuration.httpCookieStorage ?? HTTPCookieStorage.shared
+            SessionCookieStore.applyNativeTokens(
+                accessToken: decoded.accessToken,
+                refreshToken: decoded.refreshToken ?? refreshToken,
+                expiresAt: decoded.expiresAt,
+                provider: decoded.provider ?? (provider.isEmpty ? nil : provider),
+                into: storage,
+                for: baseURL
+            )
+            return decoded
+        case 401:
+            throw HermesClientError(message: "Sessão expirada. Faça login novamente.")
+        case 503:
+            throw HermesClientError(message: "Provedor de autenticação indisponível. Tente de novo em instantes.")
+        default:
+            throw HermesClientError(message: "Falha no refresh (HTTP \(http.statusCode)).")
+        }
+    }
+
+    /// Garante cookie de sessão válido antes do ticket WS.
+    /// Se o AT sumiu/expirou mas o RT ainda vive, chama `/auth/native/refresh`.
+    func ensureFreshSession() async throws {
+        restorePersistedCookies()
+        let accessNames: Set<String> = [
+            "hermes_session_at", "__Secure-hermes_session_at", "__Host-hermes_session_at",
+        ]
+        let hasAccess = sessionCookiePresent(matching: accessNames)
+        if hasAccess { return }
+        guard hasLiveRefreshToken() else { return }
+        _ = try await refreshSession()
     }
 
     /// Mint de ticket single-use para upgrade WebSocket em modo gated.

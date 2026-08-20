@@ -2,6 +2,8 @@ import SwiftUI
 
 // ============================================================================
 //  ContentView — raiz da navegação.
+//  Com URL + senha/cookie/token salvos, NÃO mostra login: restaura ou reconecta.
+//  Login só após logout, “trocar servidor” ou credenciais inválidas.
 // ============================================================================
 
 struct ContentView: View {
@@ -14,10 +16,14 @@ struct ContentView: View {
                 switch vm.connectionState {
                 case .connected:
                     ChatView()
-                case .connecting where shouldShowRestoreSplash:
+                case .connecting where shouldStayOnSessionUI:
                     restoreSplash
-                case .disconnected where shouldShowRestoreSplash && !didAttemptRestore:
+                case .disconnected where shouldStayOnSessionUI && !didAttemptRestore:
                     restoreSplash
+                case .disconnected where shouldStayOnSessionUI:
+                    reconnectPane
+                case .failed where shouldStayOnSessionUI:
+                    reconnectPane
                 case .disconnected, .failed, .waitingAuth, .connecting:
                     ServerSetupView()
                 }
@@ -26,7 +32,7 @@ struct ContentView: View {
         .task {
             guard !didAttemptRestore else { return }
             didAttemptRestore = true
-            guard vm.config.hasSavedConfig else { return }
+            guard vm.config.hasSavedConfig, vm.config.hasRestorableAuth, !vm.needsManualAuth else { return }
             switch vm.connectionState {
             case .disconnected, .connecting:
                 await vm.connect()
@@ -36,9 +42,11 @@ struct ContentView: View {
         }
     }
 
-    /// Splash enquanto restaura sessão salva (cookie, token ou login anterior).
-    private var shouldShowRestoreSplash: Bool {
-        vm.config.hasSavedConfig && vm.config.hasRestorableAuth
+    /// Mantém fora do formulário de login enquanto há como reentrar sozinho.
+    private var shouldStayOnSessionUI: Bool {
+        vm.config.hasSavedConfig
+            && vm.config.hasRestorableAuth
+            && !vm.needsManualAuth
     }
 
     private var restoreSplash: some View {
@@ -56,5 +64,54 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var reconnectPane: some View {
+        VStack(spacing: 16) {
+            if vm.connectionState == .connecting {
+                ProgressView()
+                    .controlSize(.large)
+                Text("Reconectando…")
+                    .font(.headline)
+            } else {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
+                Text("Sem conexão")
+                    .font(.headline)
+                if let msg = vm.statusMessage ?? vm.connectionState.failureMessage, !msg.isEmpty {
+                    Text(msg)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                }
+                Button {
+                    Task { await vm.connect() }
+                } label: {
+                    Text("Tentar de novo")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: 220)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Trocar servidor") {
+                    vm.presentServerSetup()
+                }
+                .font(.subheadline)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: reconnectTaskID) {
+            guard shouldStayOnSessionUI else { return }
+            if case .disconnected = vm.connectionState {
+                await vm.connect()
+            }
+        }
+    }
+
+    private var reconnectTaskID: String {
+        "\(vm.connectionState)-\(vm.needsManualAuth)"
     }
 }
