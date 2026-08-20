@@ -19,6 +19,16 @@ struct HermesWatchApp: App {
                     if phase == .active {
                         CompanionSync.shared.bind()
                     }
+                    // Braço abaixado → inactive/background: só reforça áudio,
+                    // não encerra a sessão de voz.
+                    if phase == .inactive || phase == .background {
+                        try? HermesAudioSession.activatePlayAndRecord()
+                        if case .idle = voice.phase {
+                            // nada
+                        } else {
+                            WatchRuntimeSession.shared.startIfNeeded()
+                        }
+                    }
                 }
         }
     }

@@ -51,17 +51,19 @@ struct WatchVoiceView: View {
         }
         .onAppear {
             CompanionSync.shared.bind()
+            updateRuntime(for: voice.phase)
         }
         .onChange(of: companion.phoneConnection) { _, state in
             if case .connected = state { return }
             voice.endSession()
+            WatchRuntimeSession.shared.stop()
         }
         .onChange(of: voice.phase) { _, phase in
             playHaptic(for: phase)
+            updateRuntime(for: phase)
         }
-        .onDisappear {
-            voice.endSession()
-        }
+        // Não encerrar em onDisappear: abaixar o braço apaga a tela e
+        // disparava disappear, matando a conversa no meio.
     }
 
     private var displayedConnection: ConnectionState {
@@ -247,6 +249,16 @@ struct WatchVoiceView: View {
             WKInterfaceDevice.current().play(.failure)
         default:
             break
+        }
+    }
+
+    private func updateRuntime(for phase: VoiceModeController.Phase) {
+        switch phase {
+        case .idle:
+            WatchRuntimeSession.shared.stop()
+        case .listening, .transcribing, .processing, .speaking, .error:
+            WatchRuntimeSession.shared.startIfNeeded()
+            try? HermesAudioSession.activatePlayAndRecord()
         }
     }
 
