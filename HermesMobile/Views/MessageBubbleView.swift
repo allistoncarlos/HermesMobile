@@ -214,7 +214,9 @@ private struct MessageAttachmentsView: View {
 }
 
 // ============================================================================
-//  MarkdownText — renderiza markdown leve via AttributedString.
+//  MarkdownText — renderiza markdown inline via AttributedString,
+//  preservando quebras de linha (o parser .full trata \n como soft break
+//  e o Text do SwiftUI acaba colapsando tudo numa única linha).
 // ============================================================================
 
 struct MarkdownText: View {
@@ -223,15 +225,44 @@ struct MarkdownText: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        if #available(iOS 15.0, *) {
-            if let attr = try? AttributedString(markdown: text) {
-                Text(attr)
+        Text(attributed)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var attributed: AttributedString {
+        Self.attributed(from: text)
+    }
+
+    /// Converte o texto do assistente em AttributedString com markdown inline
+    /// e quebras de linha literais (uma por `\n` no texto original).
+    static func attributed(from raw: String) -> AttributedString {
+        let normalized = normalize(raw)
+        var options = AttributedString.MarkdownParsingOptions()
+        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+
+        // Parse por linha + `\n` explícito: evita soft-breaks do markdown .full
+        // e garante que cada quebra do servidor apareça no Text.
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
+        var result = AttributedString()
+        for (index, line) in lines.enumerated() {
+            let piece = String(line)
+            if let parsed = try? AttributedString(markdown: piece, options: options) {
+                result.append(parsed)
             } else {
-                Text(text)
+                result.append(AttributedString(piece))
             }
-        } else {
-            Text(text)
+            if index < lines.count - 1 {
+                result.append(AttributedString("\n"))
+            }
         }
+        return result
+    }
+
+    /// Normaliza CRLF/CR para LF para o markdown e o Text tratarem as quebras igual.
+    private static func normalize(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
     }
 }
 
