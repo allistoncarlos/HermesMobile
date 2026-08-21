@@ -27,6 +27,13 @@ targets:
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSMicrophoneUsageDescription: O Hermes usa o microfone no modo de voz para ouvir suas perguntas.
         NSPhotoLibraryUsageDescription: O Hermes acessa suas fotos para enviar imagens como anexo no chat.
         UIBackgroundModes:

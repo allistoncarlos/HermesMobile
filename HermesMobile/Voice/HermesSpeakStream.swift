@@ -72,7 +72,6 @@ final class HermesSpeakStream: NSObject {
         settle(didStartAudio ? .done : .fallback)
     }
 
-    // MARK: - Wire
 
     private func sendJSON(_ object: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: object),
@@ -154,7 +153,6 @@ final class HermesSpeakStream: NSObject {
         }
     }
 
-    // MARK: - Audio
 
     private func prepareEngine() {
         if engine != nil { return }

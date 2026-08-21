@@ -23,7 +23,6 @@ final class HermesClient {
         restorePersistedCookies()
     }
 
-    // MARK: - URL helpers
 
     private func endpoint(_ path: String) throws -> URL {
         guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
@@ -67,7 +66,6 @@ final class HermesClient {
         SessionCookieStore.persist(from: storage, host: baseURL.host)
     }
 
-    // MARK: - Status / health
 
     func fetchStatus() async throws -> HermesStatus {
         var request = URLRequest(url: try endpoint("/api/status"))
@@ -107,7 +105,6 @@ final class HermesClient {
         return true
     }
 
-    // MARK: - Auth (cookie)
 
     /// Login usuário/senha. Persiste cookies no jar da `urlSession`.
     @discardableResult
@@ -302,7 +299,6 @@ final class HermesClient {
         SessionCookieStore.clear(from: storage, host: baseURL.host)
     }
 
-    // MARK: - Áudio nativo (Hermes 0.20+)
 
     /// STT via `POST /api/audio/transcribe` (mesmo endpoint do desktop).
     /// Retorna transcript vazio quando não há fala (silêncio) — não é erro.
@@ -382,6 +378,43 @@ final class HermesClient {
         return SpokenAudio(data: audio, mimeType: decoded.mimeType ?? "audio/mpeg", provider: decoded.provider)
     }
 
+
+    /// Arquiva (ou desarquiva) — `PATCH /api/sessions/{id}`.
+    func setSessionArchived(id: String, archived: Bool) async throws {
+        var request = URLRequest(url: try endpoint("/api/sessions/\(Self.pathEncoded(id))"))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 20
+        applyAuthHeaders(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["archived": archived])
+
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let detail = Self.errorDetail(from: data) ?? "HTTP \(code)"
+            throw HermesClientError(message: "Não foi possível arquivar: \(detail)")
+        }
+    }
+
+    /// Exclui permanentemente — `DELETE /api/sessions/{id}`.
+    func deleteStoredSession(id: String) async throws {
+        var request = URLRequest(url: try endpoint("/api/sessions/\(Self.pathEncoded(id))"))
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 20
+        applyAuthHeaders(to: &request)
+
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let detail = Self.errorDetail(from: data) ?? "HTTP \(code)"
+            throw HermesClientError(message: "Não foi possível excluir: \(detail)")
+        }
+    }
+
+    private static func pathEncoded(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+    }
+
     private static func errorDetail(from data: Data) -> String? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return String(data: data, encoding: .utf8)
@@ -432,7 +465,6 @@ struct AudioSpeakResponse: Decodable {
     }
 }
 
-// MARK: - Shared cookie-aware session factory
 
 enum HermesHTTPSession {
     /// URLSession com cookie storage persistente, compartilhada pelo app.

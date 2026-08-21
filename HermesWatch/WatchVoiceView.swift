@@ -70,7 +70,6 @@ struct WatchVoiceView: View {
         companion.phoneConnection
     }
 
-    // MARK: - Sessão de voz
 
     private var sessionContent: some View {
         VStack(spacing: 6) {
@@ -187,7 +186,6 @@ struct WatchVoiceView: View {
         .padding(.top, 2)
     }
 
-    // MARK: - Estados
 
     private var background: some View {
         LinearGradient(
@@ -232,7 +230,6 @@ struct WatchVoiceView: View {
         .padding(.horizontal, 8)
     }
 
-    // MARK: - Ações
 
     private func handlePrimary() {
         switch voice.phase {
@@ -268,7 +265,6 @@ struct WatchVoiceView: View {
         }
     }
 
-    // MARK: - Derived
 
     private var isInSession: Bool {
         switch voice.phase {

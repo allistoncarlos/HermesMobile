@@ -89,7 +89,6 @@ final class VoiceModeController: ObservableObject {
         }
     }
 
-    // MARK: - Ciclo de vida
 
     #if os(iOS)
     func attach(_ viewModel: HermesViewModel) {
@@ -325,7 +324,6 @@ final class VoiceModeController: ObservableObject {
     private func refreshNowPlaying() {}
     #endif
 
-    // MARK: - Controles
 
     func primaryAction() {
         switch phase {
@@ -381,7 +379,6 @@ final class VoiceModeController: ObservableObject {
         #endif
     }
 
-    // MARK: - Fluxo
 
     private func wireCallbacks() {
         recorder.onSilence = { [weak self] in

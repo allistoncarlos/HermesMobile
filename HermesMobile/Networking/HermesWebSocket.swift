@@ -31,12 +31,10 @@ struct WSClientError: Error, LocalizedError {
 
 final class HermesWebSocket: @unchecked Sendable {
 
-    // MARK: - Config
     private let url: URL
     private let sessionToken: String?
     private let urlSession: URLSession
 
-    // MARK: - Estado (protegido por lock)
     private let lock = NSLock()
     private var task: URLSessionWebSocketTask?
     private var nextID: Int = 1
@@ -61,7 +59,6 @@ final class HermesWebSocket: @unchecked Sendable {
         self.urlSession = urlSession
     }
 
-    // MARK: - Conexão
 
     /// Abre o WebSocket e inicia o loop de leitura.
     func connect() throws {
@@ -168,7 +165,6 @@ final class HermesWebSocket: @unchecked Sendable {
         }
     }
 
-    // MARK: - Requisições
 
     /// Envia uma requisição JSON-RPC e aguarda a resposta (corresponde ao `id`).
     /// - Parameter timeoutSeconds: se > 0, falha com timeout em vez de esperar para sempre

@@ -10,7 +10,6 @@ final class HermesViewModel: ObservableObject {
 
     @Published var config: ServerConfig
 
-    // MARK: - Estado público (UI)
     @Published var connectionState: ConnectionState = .disconnected
     @Published var openChats: [OpenChat] = []
     @Published var activeChatID: String?
@@ -59,7 +58,6 @@ final class HermesViewModel: ObservableObject {
         )
     }
 
-    // MARK: - Init
 
     init(config: ServerConfig = ServerConfig()) {
         self.config = config
@@ -92,7 +90,6 @@ final class HermesViewModel: ObservableObject {
         #endif
     }
 
-    // MARK: - Computed (chat ativo)
 
     var activeChat: OpenChat? {
         guard let id = activeChatID else { return openChats.first }
@@ -119,7 +116,6 @@ final class HermesViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Conexão
 
     /// Conecta ao servidor. Com cookies AT/RT salvos, renova via refresh token.
     /// Senha só é usada no momento do login (não é persistida).
@@ -442,7 +438,6 @@ final class HermesViewModel: ObservableObject {
         syncCompanion()
     }
 
-    // MARK: - Sessões / chats abertos
 
     private func createSession() async {
         guard let ws else { return }
@@ -473,11 +468,19 @@ final class HermesViewModel: ObservableObject {
     }
 
     func newSession() async {
+        // Já existe conversa em branco → só ativa ela (não empilha várias "Nova conversa").
+        if let blank = openChats.first(where: { Self.isBlankChat($0) }) {
+            await selectChat(blank.id)
+            return
+        }
+
         guard let ws else { return }
         do {
             let result = try await ws.call(method: "session.create", params: ["cols": .number(80)])
             if let sid = result["session_id"]?.stringValue {
                 let stored = result["stored_session_id"]?.stringValue ?? sid
+                // Remove outras abertas em branco antes de adicionar.
+                pruneBlankOpenChats(keeping: nil)
                 let chat = OpenChat(id: sid, storedSessionID: stored, title: "Nova conversa")
                 openChats.append(chat)
                 activeChatID = sid
@@ -533,6 +536,7 @@ final class HermesViewModel: ObservableObject {
     #endif
 
     func closeChat(_ id: String) {
+        Task { await closeLiveSessionOnServer(id) }
         openChats.removeAll { $0.id == id }
         if activeChatID == id {
             activeChatID = openChats.first?.id
@@ -540,6 +544,78 @@ final class HermesViewModel: ObservableObject {
         #if os(iOS)
         syncNotifierContext()
         #endif
+    }
+
+    /// Arquiva no servidor e remove da lista / abertas.
+    func archiveSession(storedID: String) async {
+        let open = openChats.filter {
+            $0.storedSessionID == storedID || $0.id == storedID
+        }
+        for chat in open {
+            closeChat(chat.id)
+        }
+        do {
+            if let client = httpClient {
+                try await client.setSessionArchived(id: storedID, archived: true)
+            } else if let ws {
+                // Fallback: alguns gateways só têm delete; archive via REST é o caminho preferido.
+                _ = try? await ws.call(
+                    method: "session.archive",
+                    params: ["session_id": .string(storedID), "archived": .bool(true)]
+                )
+            }
+            sessions.removeAll { $0.id == storedID }
+            await ensureActiveChatExists()
+            await loadSessions()
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    /// Exclui permanentemente no servidor.
+    func deleteSession(storedID: String) async {
+        let open = openChats.filter {
+            $0.storedSessionID == storedID || $0.id == storedID
+        }
+        for chat in open {
+            closeChat(chat.id)
+        }
+        do {
+            if let client = httpClient {
+                try await client.deleteStoredSession(id: storedID)
+            } else if let ws {
+                _ = try await ws.call(
+                    method: "session.delete",
+                    params: ["session_id": .string(storedID)]
+                )
+            }
+            sessions.removeAll { $0.id == storedID }
+            await ensureActiveChatExists()
+            await loadSessions()
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    /// Arquiva/exclui a partir de um chat aberto (usa stored id quando houver).
+    func archiveOpenChat(_ chat: OpenChat) async {
+        let sid = chat.storedSessionID ?? chat.id
+        if Self.isBlankChat(chat) {
+            closeChat(chat.id)
+            await ensureActiveChatExists()
+            return
+        }
+        await archiveSession(storedID: sid)
+    }
+
+    func deleteOpenChat(_ chat: OpenChat) async {
+        let sid = chat.storedSessionID ?? chat.id
+        if Self.isBlankChat(chat) {
+            closeChat(chat.id)
+            await ensureActiveChatExists()
+            return
+        }
+        await deleteSession(storedID: sid)
     }
 
     func loadSessions() async {
@@ -604,7 +680,8 @@ final class HermesViewModel: ObservableObject {
             if chat.messages.isEmpty {
                 chat.messages.append(ChatMessage(role: .system, text: "Conversa em andamento no servidor."))
             }
-            // Evita duplicar se resume devolveu um id já aberto.
+            // Ao retomar histórico, fecha conversas em branco ociosas.
+            pruneBlankOpenChats(keeping: sid)
             if let idx = openChats.firstIndex(where: { $0.id == sid }) {
                 openChats[idx] = chat
             } else {
@@ -621,7 +698,46 @@ final class HermesViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Envio de mensagem
+
+    /// Conversa sem mensagens de usuário (ainda não começou de verdade).
+    static func isBlankChat(_ chat: OpenChat) -> Bool {
+        !chat.messages.contains { $0.role == .user }
+            && !chat.isStreaming
+            && chat.pendingApproval == nil
+            && !chat.hasPendingClarify
+    }
+
+    /// Remove abertas em branco, opcionalmente preservando um id.
+    private func pruneBlankOpenChats(keeping keepID: String?) {
+        let victims = openChats.filter { Self.isBlankChat($0) && $0.id != keepID }
+        for chat in victims {
+            Task { await closeLiveSessionOnServer(chat.id) }
+        }
+        openChats.removeAll { chat in
+            Self.isBlankChat(chat) && chat.id != keepID
+        }
+        if let active = activeChatID, !openChats.contains(where: { $0.id == active }) {
+            activeChatID = openChats.first?.id
+        }
+    }
+
+    private func closeLiveSessionOnServer(_ id: String) async {
+        guard let ws else { return }
+        _ = try? await ws.call(method: "session.close", params: ["session_id": .string(id)])
+    }
+
+    /// Garante que sempre haja uma conversa ativa após arquivar/excluir.
+    private func ensureActiveChatExists() async {
+        if activeChatID != nil, openChats.contains(where: { $0.id == activeChatID }) {
+            return
+        }
+        if let first = openChats.first {
+            activeChatID = first.id
+            return
+        }
+        await newSession()
+    }
+
 
     private static let attachTimeoutSeconds: TimeInterval = 120
 
@@ -788,7 +904,6 @@ final class HermesViewModel: ObservableObject {
         finishTurn(sessionID: chat.id, error: nil)
     }
 
-    // MARK: - Aprovações e esclarecimentos
 
     func respondApproval(allow: Bool) async {
         guard let ws, var chat = mutableActiveChat(), let approval = chat.pendingApproval else { return }
@@ -835,7 +950,6 @@ final class HermesViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Processamento de eventos
 
     private func handle(_ event: HermesEvent) {
         // Eventos globais sem sessão.
@@ -1025,7 +1139,6 @@ final class HermesViewModel: ObservableObject {
         commit(chat)
     }
 
-    // MARK: - Helpers de chat
 
     private func chatIndex(for id: String) -> Int? {
         openChats.firstIndex(where: { $0.id == id })

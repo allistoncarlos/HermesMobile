@@ -132,7 +132,6 @@ final class CompanionSync: NSObject, ObservableObject {
     }
     #endif
 
-    // MARK: - iPhone → Watch (estado)
 
     #if os(iOS)
     func push(from vm: HermesViewModel) {
@@ -196,7 +195,6 @@ final class CompanionSync: NSObject, ObservableObject {
     }
     #endif
 
-    // MARK: - Watch → iPhone
 
     #if os(watchOS)
     func requestPhoneStatus() {

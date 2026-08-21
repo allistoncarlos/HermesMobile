@@ -75,7 +75,6 @@ final class HermesSpeechPlayer: NSObject, ObservableObject, AVAudioPlayerDelegat
         }
     }
 
-    // MARK: - AVAudioPlayerDelegate
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
@@ -95,7 +94,6 @@ final class HermesSpeechPlayer: NSObject, ObservableObject, AVAudioPlayerDelegat
         }
     }
 
-    // MARK: - Helpers
 
     #if os(iOS)
     private func retainBackground() {

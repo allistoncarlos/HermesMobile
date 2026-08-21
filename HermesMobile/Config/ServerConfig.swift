@@ -335,7 +335,6 @@ enum SessionCookieStore {
             || domain.hasSuffix("." + host)
     }
 
-    // MARK: - Private
 
     private static func load() -> [Record] {
         guard let data = KeychainHelper.readData(key: keychainKey) else { return [] }

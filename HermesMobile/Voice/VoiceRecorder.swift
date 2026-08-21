@@ -205,7 +205,6 @@ final class VoiceRecorder: NSObject, ObservableObject {
         return result
     }
 
-    // MARK: - Session / formats
 
     private func configureSession() throws {
         try HermesAudioSession.activatePlayAndRecord()
@@ -273,7 +272,6 @@ final class VoiceRecorder: NSObject, ObservableObject {
         fileURL = nil
     }
 
-    // MARK: - Meter / VAD (endpointing)
 
     private func tickMeter() {
         guard let rec = recorder, isRecording else { return }

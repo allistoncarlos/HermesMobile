@@ -4,11 +4,15 @@ import UIKit
 import UniformTypeIdentifiers
 
 // ============================================================================
-//  ChatView — conversa estilo ChatGPT com chats simultâneos, sidebar e anexos.
+//  ChatView — conversa estilo ChatGPT: header limpo, mensagens centralizadas,
+//  composer flutuante. Adaptado a iPhone (retrato/paisagem) e iPad.
 // ============================================================================
 
 struct ChatView: View {
     @EnvironmentObject private var vm: HermesViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    var onToggleSidebar: (() -> Void)?
+
     @StateObject private var voice = VoiceModeController()
     @State private var draft: String = ""
     @State private var pendingAttachments: [ChatAttachment] = []
@@ -26,17 +30,17 @@ struct ChatView: View {
     private static let previewMaxSide: CGFloat = 360
 
     var body: some View {
-        VStack(spacing: 0) {
-            if vm.openChats.count > 1 {
-                openChatsStrip
-                Divider()
+        GeometryReader { geo in
+            let metrics = HermesLayoutMetrics(size: geo.size, horizontalSizeClass: horizontalSizeClass)
+
+            VStack(spacing: 0) {
+                chatHeader(metrics: metrics)
+                messageList(metrics: metrics)
+                composer(metrics: metrics)
             }
-            messageList
-            Divider()
-            inputBar
+            .background(HermesTheme.chatBackground.ignoresSafeArea())
         }
-        .navigationTitle(vm.sessionTitle)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
         .fullScreenCover(isPresented: $voice.isPresented) {
             VoiceModeView(voice: voice)
                 .environmentObject(vm)
@@ -58,68 +62,9 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: .hermesStopVoice)) { _ in
             fulfillSiriVoiceStopIfNeeded()
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .topBarLeading) {
-                Button {
-                    vm.showSidebar = true
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "list.bullet")
-                        if vm.hasAttentionElsewhere {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 8, height: 8)
-                                .offset(x: 4, y: -4)
-                        }
-                    }
-                }
-            }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if let model = vm.sessionModel {
-                    Text(model)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Menu {
-                    Button {
-                        Task { await vm.newSession() }
-                    } label: {
-                        Label("Nova conversa", systemImage: "square.and.pencil")
-                    }
-                    Button {
-                        vm.showSidebar = true
-                    } label: {
-                        Label("Todas as conversas", systemImage: "clock.arrow.circlepath")
-                    }
-                    Divider()
-                    Button(role: .destructive) {
-                        Task { await vm.logout() }
-                    } label: {
-                        Label("Sair", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                    Button(role: .destructive) {
-                        vm.presentServerSetup()
-                    } label: {
-                        Label("Trocar de servidor", systemImage: "network")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-            }
-        }
-        .sheet(isPresented: $vm.showSidebar) {
-            NavigationStack {
-                ChatSidebarView()
-            }
-        }
-        // PhotosPicker dentro de Menu não abre no iOS — usar confirmationDialog + modifier.
         .confirmationDialog("Anexar", isPresented: $showAttachOptions, titleVisibility: .visible) {
-            Button("Fotos e vídeos") {
-                showPhotosPicker = true
-            }
-            Button("Arquivos") {
-                showFileImporter = true
-            }
+            Button("Fotos e vídeos") { showPhotosPicker = true }
+            Button("Arquivos") { showFileImporter = true }
             Button("Cancelar", role: .cancel) {}
         }
         .photosPicker(
@@ -149,73 +94,110 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Faixa de chats abertos
 
-    private var openChatsStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(vm.openChats) { chat in
-                    Button {
-                        Task { await vm.selectChat(chat.id) }
-                    } label: {
-                        HStack(spacing: 6) {
-                            if chat.isStreaming {
-                                ProgressView().controlSize(.mini)
-                            }
-                            Text(chat.title.isEmpty ? "Nova" : chat.title)
-                                .font(.caption.weight(chat.id == vm.activeChatID ? .semibold : .regular))
-                                .lineLimit(1)
-                            if chat.needsAttention || chat.pendingApproval != nil {
-                                Circle().fill(.red).frame(width: 6, height: 6)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(chat.id == vm.activeChatID
-                                      ? Color.accentColor.opacity(0.18)
-                                      : Color(.secondarySystemBackground))
-                        )
+    private func chatHeader(metrics: HermesLayoutMetrics) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                openSidebar()
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(HermesTheme.rowHover))
+                    if vm.hasAttentionElsewhere {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 2, y: 2)
                     }
-                    .buttonStyle(.plain)
                 }
+            }
+            .accessibilityLabel("Conversas")
+
+            VStack(spacing: 1) {
+                Text(vm.sessionTitle)
+                    .font(metrics.isLandscape ? .subheadline.weight(.semibold) : .headline)
+                    .lineLimit(1)
+                if let model = vm.sessionModel, !metrics.isLandscape {
+                    Text(model)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            Button {
+                Task { await vm.newSession() }
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(HermesTheme.rowHover))
+            }
+            .accessibilityLabel("Nova conversa")
+
+            Menu {
                 Button {
                     Task { await vm.newSession() }
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.caption.weight(.semibold))
-                        .padding(8)
-                        .background(Circle().fill(Color(.secondarySystemBackground)))
+                    Label("Nova conversa", systemImage: "square.and.pencil")
                 }
-                .buttonStyle(.plain)
+                Button {
+                    openSidebar()
+                } label: {
+                    Label("Todas as conversas", systemImage: "clock.arrow.circlepath")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    Task { await vm.logout() }
+                } label: {
+                    Label("Sair", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+                Button(role: .destructive) {
+                    vm.presentServerSetup()
+                } label: {
+                    Label("Trocar de servidor", systemImage: "network")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(HermesTheme.rowHover))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+        }
+        .padding(.horizontal, metrics.horizontalPadding)
+        .padding(.vertical, metrics.isLandscape ? 6 : 10)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
         }
     }
 
-    // MARK: - Lista de mensagens
 
-    private var messageList: some View {
+    private func messageList(metrics: HermesLayoutMetrics) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 14) {
+                LazyVStack(spacing: metrics.messageSpacing) {
                     if vm.messages.isEmpty {
-                        emptyState
+                        emptyState(metrics: metrics)
                     }
                     ForEach(Array(vm.messages.enumerated()), id: \.element.id) { index, message in
                         let isLastAssistant = message.role == .assistant
                             && index == vm.messages.lastIndex(where: { $0.role == .assistant })
                         MessageBubbleView(
                             message: message,
-                            activityText: isLastAssistant ? vm.toolStatusText : nil
+                            activityText: isLastAssistant ? vm.toolStatusText : nil,
+                            isCompact: metrics.isLandscape && !metrics.isRegularWidth
                         )
                         .id(message.id)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, metrics.horizontalPadding)
+                .padding(.vertical, metrics.isLandscape ? 8 : 14)
+                .frame(maxWidth: HermesTheme.chatMaxWidth)
+                .frame(maxWidth: .infinity)
             }
             .onChange(of: vm.messages.count) { _, _ in
                 scrollToBottom(proxy)
@@ -237,20 +219,24 @@ struct ChatView: View {
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 10) {
+    private func emptyState(metrics: HermesLayoutMetrics) -> some View {
+        VStack(spacing: metrics.isLandscape ? 8 : 14) {
             Image(systemName: "sparkles")
-                .font(.system(size: 40))
-                .foregroundStyle(.tint)
-            Text("Fale com seu Hermes")
-                .font(.headline)
-            Text("O agente pode usar ferramentas, acessar o terminal e executar tarefas no servidor. Abra várias conversas ao mesmo tempo pela lista.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .font(.system(size: metrics.isLandscape ? 28 : 40, weight: .medium))
+                .foregroundStyle(.primary)
+            Text("Como posso ajudar?")
+                .font(metrics.isLandscape ? .title3.weight(.semibold) : .title2.weight(.semibold))
+            if !metrics.isLandscape {
+                Text("Pergunte qualquer coisa. O Hermes pode usar ferramentas e executar tarefas no servidor.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
         }
-        .padding(.vertical, 60)
+        .frame(maxWidth: .infinity)
+        .padding(.top, metrics.emptyStateTopPadding)
+        .padding(.bottom, 20)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
@@ -260,62 +246,87 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Barra de entrada
 
-    private var inputBar: some View {
+    private func composer(metrics: HermesLayoutMetrics) -> some View {
         VStack(spacing: 8) {
             if let approval = vm.pendingApproval {
-                ApprovalBanner(approval: approval) { allow in
-                    Task { await vm.respondApproval(allow: allow) }
+                ChatColumn {
+                    ApprovalBanner(approval: approval) { allow in
+                        Task { await vm.respondApproval(allow: allow) }
+                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
+                .padding(.horizontal, metrics.horizontalPadding)
             }
 
             if !pendingAttachments.isEmpty {
                 attachmentStrip
+                    .padding(.horizontal, metrics.horizontalPadding)
             }
 
-            HStack(alignment: .bottom, spacing: 10) {
-                attachButton
+            ChatColumn {
+                HStack(alignment: .bottom, spacing: 8) {
+                    attachButton
 
-                TextField(vm.hasPendingClarify ? "Resposta…" : "Mensagem", text: $draft, axis: .vertical)
-                    .lineLimit(1...6)
+                    TextField(
+                        vm.hasPendingClarify ? "Resposta…" : "Pergunte qualquer coisa",
+                        text: $draft,
+                        axis: .vertical
+                    )
+                    .lineLimit(1...(metrics.isLandscape ? 3 : 6))
                     .focused($inputFocused)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
+                    .padding(.vertical, metrics.isLandscape ? 8 : 10)
 
-                if showVoiceButton {
-                    Button {
-                        inputFocused = false
-                        voice.attach(vm)
-                        voice.present()
-                    } label: {
-                        Image(systemName: "waveform.circle.fill")
-                            .font(.system(size: 36))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(Color.accentColor)
+                    if showVoiceButton {
+                        Button {
+                            inputFocused = false
+                            voice.attach(vm)
+                            voice.present()
+                        } label: {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .frame(width: 34, height: 34)
+                        }
+                        .disabled(!vm.canSend)
+                        .accessibilityLabel("Modo de voz")
+                    } else {
+                        Button {
+                            sendOrStop()
+                        } label: {
+                            Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 34, height: 34)
+                                .background(
+                                    Circle().fill(
+                                        vm.isStreaming
+                                            ? Color.primary
+                                            : Color.accentColor
+                                    )
+                                )
+                        }
+                        .disabled((!vm.canSend && !vm.isStreaming) || (isSending && !vm.isStreaming))
+                        .accessibilityLabel(vm.isStreaming ? "Parar" : "Enviar")
                     }
-                    .disabled(!vm.canSend)
-                    .accessibilityLabel("Modo de voz")
-                } else {
-                    Button {
-                        sendOrStop()
-                    } label: {
-                        Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
-                            .font(.system(size: 18, weight: .semibold))
-                            .frame(width: 38, height: 38)
-                            .background(Circle().fill(Color.accentColor))
-                            .foregroundStyle(.white)
-                    }
-                    .disabled((!vm.canSend && !vm.isStreaming) || (isSending && !vm.isStreaming))
                 }
+                .padding(.leading, 6)
+                .padding(.trailing, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: HermesTheme.composerCorner, style: .continuous)
+                        .fill(HermesTheme.composerFill)
+                        .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: HermesTheme.composerCorner, style: .continuous)
+                        .strokeBorder(HermesTheme.composerStroke, lineWidth: 1)
+                )
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 6)
+            .padding(.horizontal, metrics.horizontalPadding)
+            .padding(.bottom, metrics.composerBottomPadding)
         }
         .padding(.top, 6)
+        .background(HermesTheme.chatBackground)
     }
 
     private var attachButton: some View {
@@ -324,25 +335,25 @@ struct ChatView: View {
             showAttachOptions = true
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 18, weight: .semibold))
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(Color(.secondarySystemBackground)))
-                .foregroundStyle(Color.accentColor)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 34, height: 34)
         }
         .disabled(!vm.canSend || vm.isStreaming || vm.hasPendingClarify || isSending)
         .accessibilityLabel("Anexar")
     }
 
     private var attachmentStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(pendingAttachments) { attachment in
-                    AttachmentChip(attachment: attachment) {
-                        pendingAttachments.removeAll { $0.id == attachment.id }
+        ChatColumn {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(pendingAttachments) { attachment in
+                        AttachmentChip(attachment: attachment) {
+                            pendingAttachments.removeAll { $0.id == attachment.id }
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 12)
         }
     }
 
@@ -351,6 +362,14 @@ struct ChatView: View {
             && pendingAttachments.isEmpty
             && !vm.isStreaming
             && !isSending
+    }
+
+    private func openSidebar() {
+        if let onToggleSidebar {
+            onToggleSidebar()
+        } else {
+            vm.showSidebar = true
+        }
     }
 
     /// Siri / App Shortcut: nova sessão + modo voz.
@@ -389,7 +408,6 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Pickers
 
     private func loadLibraryItems(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
@@ -672,6 +690,9 @@ struct ApprovalBanner: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
     }
 }

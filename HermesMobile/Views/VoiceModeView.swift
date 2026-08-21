@@ -2,6 +2,7 @@ import SwiftUI
 
 // ============================================================================
 //  VoiceModeView — tela fullscreen de voz (orb + escuta/fala), estilo ChatGPT.
+//  Layout empilhado em retrato; em paisagem orb + texto lado a lado.
 // ============================================================================
 
 struct VoiceModeView: View {
@@ -9,19 +10,24 @@ struct VoiceModeView: View {
     @EnvironmentObject private var vm: HermesViewModel
 
     var body: some View {
-        ZStack {
-            background
+        GeometryReader { geo in
+            let landscape = geo.size.width > geo.size.height
 
-            VStack(spacing: 0) {
-                topBar
-                Spacer()
-                orb
-                caption
-                Spacer()
-                bottomControls
+            ZStack {
+                background
+
+                VStack(spacing: 0) {
+                    topBar
+                    if landscape {
+                        landscapeBody
+                    } else {
+                        portraitBody
+                    }
+                    bottomControls(compact: landscape)
+                }
+                .padding(.horizontal, landscape ? 20 : 24)
+                .padding(.vertical, landscape ? 10 : 16)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
         }
         .preferredColorScheme(.dark)
         .statusBarHidden(false)
@@ -36,7 +42,26 @@ struct VoiceModeView: View {
         }
     }
 
-    // MARK: - Layers
+
+    private var portraitBody: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            orb(size: 168)
+            caption
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var landscapeBody: some View {
+        HStack(alignment: .center, spacing: 24) {
+            orb(size: 120)
+                .frame(maxWidth: .infinity)
+            caption
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: .infinity)
+    }
+
 
     private var background: some View {
         ZStack {
@@ -51,7 +76,6 @@ struct VoiceModeView: View {
             )
             .ignoresSafeArea()
 
-            // Glow sutil sob o orb
             Circle()
                 .fill(orbTint.opacity(0.22))
                 .frame(width: 280, height: 280)
@@ -75,26 +99,24 @@ struct VoiceModeView: View {
 
             Spacer()
 
-            Text("Handsfree")
+            Text("Modo de voz")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.7))
 
             Spacer()
 
-            // Espelho do botão X para centralizar o título
             Color.clear.frame(width: 40, height: 40)
         }
     }
 
-    private var orb: some View {
-        let base: CGFloat = 168
+    private func orb(size: CGFloat) -> some View {
         let pulse = CGFloat(0.08 + Double(voice.audioLevel) * 0.35)
 
         return ZStack {
             ForEach(0..<3, id: \.self) { i in
                 Circle()
                     .stroke(orbTint.opacity(0.25 - Double(i) * 0.06), lineWidth: 1.5)
-                    .frame(width: base + CGFloat(i + 1) * 36 + pulse * 40)
+                    .frame(width: size + CGFloat(i + 1) * 28 + pulse * 32)
                     .scaleEffect(phaseScale)
                     .animation(orbAnimation, value: voice.audioLevel)
                     .animation(orbAnimation, value: voice.phase)
@@ -110,21 +132,21 @@ struct VoiceModeView: View {
                         ],
                         center: .center,
                         startRadius: 10,
-                        endRadius: base / 2
+                        endRadius: size / 2
                     )
                 )
-                .frame(width: base + pulse * 28, height: base + pulse * 28)
+                .frame(width: size + pulse * 22, height: size + pulse * 22)
                 .shadow(color: orbTint.opacity(0.45), radius: 28, y: 8)
                 .scaleEffect(phaseScale)
                 .animation(orbAnimation, value: voice.audioLevel)
                 .animation(orbAnimation, value: voice.phase)
 
             Image(systemName: orbIcon)
-                .font(.system(size: 36, weight: .medium))
+                .font(.system(size: size > 140 ? 36 : 28, weight: .medium))
                 .foregroundStyle(.white.opacity(0.95))
                 .symbolEffect(.variableColor.iterative, isActive: isAnimatingIcon)
         }
-        .frame(height: 260)
+        .frame(height: size + 80)
         .contentShape(Rectangle())
         .onTapGesture { voice.primaryAction() }
         .accessibilityLabel(voice.statusLabel)
@@ -175,21 +197,23 @@ struct VoiceModeView: View {
             }
         }
         .padding(.horizontal, 8)
-        .frame(minHeight: 120, alignment: .top)
+        .frame(minHeight: 80, alignment: .top)
     }
 
-    private var bottomControls: some View {
-        HStack(spacing: 36) {
+    private func bottomControls(compact: Bool) -> some View {
+        HStack(spacing: compact ? 28 : 36) {
             Button {
                 voice.dismiss()
             } label: {
                 VStack(spacing: 6) {
                     Image(systemName: "keyboard")
                         .font(.system(size: 20, weight: .medium))
-                        .frame(width: 52, height: 52)
+                        .frame(width: compact ? 46 : 52, height: compact ? 46 : 52)
                         .background(Circle().fill(.white.opacity(0.12)))
-                    Text("Teclado")
-                        .font(.caption2)
+                    if !compact {
+                        Text("Teclado")
+                            .font(.caption2)
+                    }
                 }
                 .foregroundStyle(.white.opacity(0.85))
             }
@@ -200,10 +224,12 @@ struct VoiceModeView: View {
                 VStack(spacing: 6) {
                     Image(systemName: primaryButtonIcon)
                         .font(.system(size: 22, weight: .semibold))
-                        .frame(width: 64, height: 64)
+                        .frame(width: compact ? 56 : 64, height: compact ? 56 : 64)
                         .background(Circle().fill(primaryButtonFill))
-                    Text(primaryButtonLabel)
-                        .font(.caption2)
+                    if !compact {
+                        Text(primaryButtonLabel)
+                            .font(.caption2)
+                    }
                 }
                 .foregroundStyle(.white)
             }
@@ -214,18 +240,19 @@ struct VoiceModeView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "plus.bubble")
                         .font(.system(size: 20, weight: .medium))
-                        .frame(width: 52, height: 52)
+                        .frame(width: compact ? 46 : 52, height: compact ? 46 : 52)
                         .background(Circle().fill(.white.opacity(0.12)))
-                    Text("Nova")
-                        .font(.caption2)
+                    if !compact {
+                        Text("Nova")
+                            .font(.caption2)
+                    }
                 }
                 .foregroundStyle(.white.opacity(0.85))
             }
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, compact ? 4 : 12)
     }
 
-    // MARK: - Derived
 
     private var displayText: String {
         switch voice.phase {

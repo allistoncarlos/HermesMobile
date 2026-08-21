@@ -67,7 +67,6 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    // MARK: - Events
 
     func notifyReplyReady(sessionID: String, title: String, body: String) {
         guard shouldNotify(for: sessionID) else { return }
@@ -125,7 +124,6 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
-    // MARK: - Policy
 
     /// Notifica se o app não está em foreground olhando exatamente esse chat.
     private func shouldNotify(for sessionID: String) -> Bool {
@@ -174,7 +172,6 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().setNotificationCategories(Set(cats))
     }
 
-    // MARK: - UNUserNotificationCenterDelegate
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,

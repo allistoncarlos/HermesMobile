@@ -2,60 +2,87 @@ import SwiftUI
 import UIKit
 
 // ============================================================================
-//  MessageBubbleView — renderiza uma mensagem do chat (usuario / assistente /
-//  sistema), com markdown, bloco de raciocínio e chips de ferramentas.
+//  MessageBubbleView — mensagens estilo ChatGPT:
+//  usuário à direita em bolha cinza; assistente à esquerda com avatar.
 // ============================================================================
 
 struct MessageBubbleView: View {
     let message: ChatMessage
     /// Status de atividade do turno (upload, pensando, ferramenta…).
     var activityText: String? = nil
+    var isCompact: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            switch message.role {
-            case .user:
-                HStack {
-                    Spacer(minLength: 48)
-                    VStack(alignment: .trailing, spacing: 6) {
-                        if !message.attachments.isEmpty {
-                            MessageAttachmentsView(attachments: message.attachments)
-                        }
-                        if !message.text.isEmpty {
-                            Text(message.text)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.accentColor)
-                                .foregroundStyle(.white)
-                                .cornerRadius(18, corners: [.topLeft, .topRight, .bottomLeft])
-                                .textSelection(.enabled)
-                        }
-                    }
-                }
+        switch message.role {
+        case .user:
+            userRow
+        case .assistant:
+            assistantRow
+        case .system:
+            Text(message.text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+        }
+    }
 
-            case .assistant:
-                VStack(alignment: .leading, spacing: 8) {
-                    reasoningBlock
-                    if showThinkingPlaceholder {
-                        thinkingIndicator
-                    }
-                    if !message.text.isEmpty {
-                        MarkdownText(message.text + streamingCursor)
-                            .textSelection(.enabled)
-                    }
-                    toolsRow
-                }
-                .padding(.horizontal, 2)
 
-            case .system:
-                Text(message.text)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
+    private var userRow: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Spacer(minLength: isCompact ? 36 : 56)
+            VStack(alignment: .trailing, spacing: 6) {
+                if !message.attachments.isEmpty {
+                    MessageAttachmentsView(attachments: message.attachments)
+                }
+                if !message.text.isEmpty {
+                    Text(message.text)
+                        .font(.body)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(HermesTheme.userBubble)
+                        .foregroundStyle(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: HermesTheme.bubbleCorner, style: .continuous))
+                        .textSelection(.enabled)
+                }
             }
         }
+    }
+
+
+    private var assistantRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            assistantAvatar
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 8) {
+                reasoningBlock
+                if showThinkingPlaceholder {
+                    thinkingIndicator
+                }
+                if !message.text.isEmpty {
+                    MarkdownText(message.text + streamingCursor)
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                toolsRow
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var assistantAvatar: some View {
+        ZStack {
+            Circle()
+                .fill(HermesTheme.assistantAvatarFill)
+                .frame(width: HermesTheme.avatarSize, height: HermesTheme.avatarSize)
+            Image(systemName: "sparkles")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(HermesTheme.assistantAvatarForeground)
+        }
+        .accessibilityHidden(true)
     }
 
     private var streamingCursor: String {
@@ -80,12 +107,6 @@ struct MessageBubbleView: View {
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
-        )
         .accessibilityLabel(activityText ?? "Pensando")
     }
 
@@ -102,20 +123,35 @@ struct MessageBubbleView: View {
     @ViewBuilder
     private var toolsRow: some View {
         if !message.tools.isEmpty {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: 6) {
-                ForEach(message.tools) { tool in
-                    HStack(spacing: 4) {
-                        Image(systemName: icon(for: tool.status))
-                            .foregroundStyle(color(for: tool.status))
-                        Text(tool.name)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                    .font(.caption2)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(.tertiarySystemBackground)))
+            FlowToolChips(tools: message.tools)
+        }
+    }
+}
+
+// ============================================================================
+//  FlowToolChips — chips de ferramentas em wrap simples.
+// ============================================================================
+
+private struct FlowToolChips: View {
+    let tools: [ToolCall]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 6)], alignment: .leading, spacing: 6) {
+            ForEach(tools) { tool in
+                HStack(spacing: 4) {
+                    Image(systemName: icon(for: tool.status))
+                        .foregroundStyle(color(for: tool.status))
+                    Text(tool.name)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
+                .font(.caption2)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(.tertiarySystemBackground))
+                )
             }
         }
     }
@@ -128,6 +164,7 @@ struct MessageBubbleView: View {
         default: return "wrench.and.screwdriver"
         }
     }
+
     private func color(for status: String) -> Color {
         switch status {
         case "running": return .orange
@@ -146,7 +183,7 @@ private struct ReasoningIndicator: View {
     let text: String
     let isStreaming: Bool
 
-    @State private var expanded = true
+    @State private var expanded = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
@@ -155,6 +192,7 @@ private struct ReasoningIndicator: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
         } label: {
             HStack(spacing: 6) {
                 if isStreaming {
@@ -170,7 +208,10 @@ private struct ReasoningIndicator: View {
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
         .onAppear {
             if isStreaming { expanded = true }
         }
@@ -202,11 +243,11 @@ private struct MessageAttachmentsView: View {
                             .lineLimit(1)
                     }
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.85))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(HermesTheme.userBubble)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
         }
@@ -223,12 +264,11 @@ struct MarkdownText: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        if #available(iOS 15.0, *) {
-            if let attr = try? AttributedString(markdown: text) {
-                Text(attr)
-            } else {
-                Text(text)
-            }
+        if let attr = try? AttributedString(
+            markdown: text,
+            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) {
+            Text(attr)
         } else {
             Text(text)
         }
@@ -250,9 +290,11 @@ struct RoundedCorner: Shape {
     var corners: UIRectCorner = .allCorners
 
     func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect,
-                                byRoundingCorners: corners,
-                                cornerRadii: CGSize(width: radius, height: radius))
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
         return Path(path.cgPath)
     }
 }
