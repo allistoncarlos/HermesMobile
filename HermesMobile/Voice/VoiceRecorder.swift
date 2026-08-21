@@ -2,8 +2,9 @@ import AVFoundation
 import Foundation
 
 // ============================================================================
-//  VoiceRecorder — grava o microfone com VAD (silêncio) para enviar ao
+//  VoiceRecorder — grava o microfone com VAD (endpointing) para enviar ao
 //  STT nativo do Hermes (`POST /api/audio/transcribe`), igual ao desktop.
+//  Detecta fim de fala com piso de ruído adaptativo + histerese + silêncio pós-fala.
 // ============================================================================
 
 @MainActor
@@ -41,6 +42,10 @@ final class VoiceRecorder: NSObject, ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var audioLevel: Float = 0
     @Published private(set) var heardSpeech = false
+    /// True enquanto o VAD considera que há fala ativa.
+    @Published private(set) var isHearingSpeech = false
+    /// 0…1 progresso do silêncio pós-fala até o endpoint automático.
+    @Published private(set) var silenceProgress: Float = 0
 
     /// Disparado após silêncio pós-fala (ou idle longo sem fala).
     var onSilence: (() -> Void)?
@@ -51,18 +56,31 @@ final class VoiceRecorder: NSObject, ObservableObject {
     private var mimeType: String = "audio/mp4"
     private var startedAt: Date?
     private var silenceStartedAt: Date?
+    private var speechStartedAt: Date?
     private var silenceTriggered = false
+    private var smoothedLevel: Float = 0
+    private var noiseFloor: Float = 0.03
+    private var calibrating = true
 
-    /// Espelha o desktop Hermes (`silenceLevel: 0.075`, `silenceMs: 1250`).
-    var speechThreshold: Float = 0.08
-    var silenceMs: TimeInterval = 1.25
+    /// Silêncio contínuo após fala suficiente para fechar o turno (handsfree).
+    var silenceMs: TimeInterval = 0.95
+    /// Tempo mínimo de fala contínua antes de permitir endpoint.
+    var minSpeechMs: TimeInterval = 0.28
+    /// Janela inicial para medir o piso de ruído ambiente.
+    var calibrateMs: TimeInterval = 0.45
     #if os(watchOS)
     var idleSilenceMs: TimeInterval = 10.0
     var maxSeconds: TimeInterval = 60
     #else
-    var idleSilenceMs: TimeInterval = 12.0
+    var idleSilenceMs: TimeInterval = 14.0
     var maxSeconds: TimeInterval = 120
     #endif
+
+    private let levelEMA: Float = 0.38
+    private let enterMargin: Float = 0.11
+    private let exitMargin: Float = 0.055
+    private let absoluteFloor: Float = 0.02
+    private let absoluteCeiling: Float = 0.18
 
     static func requestPermission() async -> Bool {
         await withCheckedContinuation { cont in
@@ -115,10 +133,16 @@ final class VoiceRecorder: NSObject, ObservableObject {
                 recorder = rec
                 isRecording = true
                 heardSpeech = false
+                isHearingSpeech = false
+                silenceProgress = 0
                 silenceTriggered = false
                 silenceStartedAt = nil
+                speechStartedAt = nil
                 startedAt = Date()
                 audioLevel = 0
+                smoothedLevel = 0
+                noiseFloor = 0.03
+                calibrating = true
 
                 meterTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
                     Task { @MainActor in self?.tickMeter() }
@@ -142,6 +166,8 @@ final class VoiceRecorder: NSObject, ObservableObject {
         guard let rec = recorder else {
             isRecording = false
             audioLevel = 0
+            silenceProgress = 0
+            isHearingSpeech = false
             if discard { cleanupOrphanFile() }
             return nil
         }
@@ -153,6 +179,8 @@ final class VoiceRecorder: NSObject, ObservableObject {
         recorder = nil
         isRecording = false
         audioLevel = 0
+        silenceProgress = 0
+        isHearingSpeech = false
 
         defer {
             if discard { cleanupOrphanFile() }
@@ -245,40 +273,82 @@ final class VoiceRecorder: NSObject, ObservableObject {
         fileURL = nil
     }
 
-    // MARK: - Meter / VAD
+    // MARK: - Meter / VAD (endpointing)
 
     private func tickMeter() {
         guard let rec = recorder, isRecording else { return }
         rec.updateMeters()
         let db = rec.averagePower(forChannel: 0)
         // Sem input real (simulador), averagePower fica em -120 e o orb não pulsa.
-        let normalized = max(0, min(1, (db + 55) / 40))
-        audioLevel = normalized
+        let raw = max(0, min(1, (db + 55) / 40))
+        smoothedLevel = smoothedLevel * (1 - levelEMA) + raw * levelEMA
+        audioLevel = smoothedLevel
 
         let now = Date()
-        if let startedAt, now.timeIntervalSince(startedAt) >= maxSeconds, !silenceTriggered {
-            silenceTriggered = true
-            onSilence?()
+        guard let startedAt else { return }
+
+        if now.timeIntervalSince(startedAt) >= maxSeconds, !silenceTriggered {
+            fireSilence()
             return
         }
 
-        if normalized >= speechThreshold {
+        // Calibra piso de ruído nos primeiros frames (sem fala ainda).
+        if calibrating {
+            let elapsed = now.timeIntervalSince(startedAt)
+            noiseFloor = min(absoluteCeiling, max(noiseFloor, smoothedLevel))
+            if elapsed >= calibrateMs {
+                calibrating = false
+                noiseFloor = min(absoluteCeiling, max(absoluteFloor, noiseFloor))
+            }
+        }
+
+        let enterThreshold = min(0.55, noiseFloor + enterMargin)
+        let exitThreshold = min(enterThreshold - 0.02, max(absoluteFloor, noiseFloor + exitMargin))
+
+        if smoothedLevel >= enterThreshold {
+            if !isHearingSpeech {
+                isHearingSpeech = true
+                speechStartedAt = now
+            }
             heardSpeech = true
             silenceStartedAt = nil
-        } else if heardSpeech {
-            if silenceStartedAt == nil { silenceStartedAt = now }
-            if let silenceStartedAt,
-               now.timeIntervalSince(silenceStartedAt) >= silenceMs,
-               !silenceTriggered {
-                silenceTriggered = true
-                onSilence?()
+            silenceProgress = 0
+            // Ambiente ruidoso: sobe o piso lentamente para não “grudar” em fala.
+            if !calibrating {
+                noiseFloor = min(absoluteCeiling, noiseFloor * 0.995 + smoothedLevel * 0.005)
             }
-        } else if let startedAt,
+        } else if isHearingSpeech, smoothedLevel < exitThreshold {
+            isHearingSpeech = false
+            silenceStartedAt = now
+        } else if heardSpeech, !isHearingSpeech {
+            if silenceStartedAt == nil { silenceStartedAt = now }
+            let speechOK: Bool = {
+                guard let speechStartedAt else { return true }
+                return now.timeIntervalSince(speechStartedAt) >= minSpeechMs
+            }()
+            if let silenceStartedAt, speechOK {
+                let silentFor = now.timeIntervalSince(silenceStartedAt)
+                silenceProgress = Float(min(1, silentFor / silenceMs))
+                if silentFor >= silenceMs, !silenceTriggered {
+                    fireSilence()
+                    return
+                }
+            }
+        } else if !heardSpeech,
                   now.timeIntervalSince(startedAt) >= idleSilenceMs,
                   !silenceTriggered {
-            silenceTriggered = true
-            onSilence?()
+            fireSilence()
+            return
+        } else {
+            silenceProgress = 0
         }
+    }
+
+    private func fireSilence() {
+        silenceTriggered = true
+        silenceProgress = 1
+        isHearingSpeech = false
+        onSilence?()
     }
 }
 
@@ -287,6 +357,8 @@ extension VoiceRecorder: AVAudioRecorderDelegate {
         Task { @MainActor in
             self.isRecording = false
             self.audioLevel = 0
+            self.silenceProgress = 0
+            self.isHearingSpeech = false
         }
     }
 }

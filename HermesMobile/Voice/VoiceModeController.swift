@@ -22,6 +22,9 @@ final class VoiceModeController: ObservableObject {
     @Published private(set) var liveTranscript: String = ""
     @Published private(set) var assistantCaption: String = ""
     @Published private(set) var audioLevel: Float = 0
+    /// Progresso 0…1 do silêncio pós-fala (endpoint automático).
+    @Published private(set) var silenceProgress: Float = 0
+    @Published private(set) var isHearingSpeech = false
     @Published var isPresented: Bool = false
 
     private let recorder = VoiceRecorder()
@@ -29,6 +32,7 @@ final class VoiceModeController: ObservableObject {
     #if os(iOS)
     private weak var vm: HermesViewModel?
     private var speakStream: HermesSpeakStream?
+    private var remoteObservers: [NSObjectProtocol] = []
     #endif
     private var waitTask: Task<Void, Never>?
     private var levelTask: Task<Void, Never>?
@@ -36,19 +40,47 @@ final class VoiceModeController: ObservableObject {
     private var turnBusy = false
     private var holdingSessionBackground = false
     private var standaloneSpeakTask: Task<Void, Never>?
+    private var awaitingVoiceApproval = false
+    private var approvalPromptTries = 0
+    private var lastNowPlayingStatus = ""
 
     private static let stopPhrases: Set<String> = [
         "parar", "pare", "stop", "cancela", "cancelar",
         "tchau", "adeus", "encerrar", "sair", "never mind", "goodbye",
     ]
+    private static let approvePhrases: Set<String> = [
+        "sim", "yes", "aprovar", "aprova", "permite", "permitir",
+        "ok", "okay", "pode", "pode sim", "confirma", "confirmar",
+        "aceito", "aceitar", "vai", "pode ir",
+    ]
+    private static let denyPhrases: Set<String> = [
+        "não", "nao", "no", "negar", "nega", "recusar", "recusa",
+        "bloquear", "rejeitar", "rejeita",
+    ]
 
     var statusLabel: String {
         switch phase {
-        case .idle: return "Toque para falar"
-        case .listening: return "Ouvindo… fale com o Hermes"
+        case .idle:
+            return "Handsfree — Siri ou toque para começar"
+        case .listening:
+            #if os(iOS)
+            if awaitingVoiceApproval {
+                return "Diga “sim” ou “não” para a aprovação"
+            }
+            #endif
+            if isHearingSpeech {
+                return "Ouvindo… pare de falar para enviar"
+            }
+            if silenceProgress > 0.15 {
+                return "Enviando quando o silêncio completar…"
+            }
+            return "Ouvindo… fale à vontade"
         case .transcribing: return "Transcrevendo no Hermes…"
         case .processing:
             #if os(iOS)
+            if awaitingVoiceApproval {
+                return "Aguardando sua aprovação por voz…"
+            }
             if let tool = vm?.toolStatusText { return tool }
             #endif
             return "Hermes pensando…"
@@ -85,9 +117,14 @@ final class VoiceModeController: ObservableObject {
         isActive = true
         liveTranscript = ""
         assistantCaption = ""
+        silenceProgress = 0
+        isHearingSpeech = false
+        awaitingVoiceApproval = false
+        approvalPromptTries = 0
         #if os(iOS)
-        retainSessionBackground(reason: "Modo voz Hermes")
+        retainSessionBackground(reason: "Ouvindo o Hermes")
         try? HermesAudioSession.activatePlayAndRecord()
+        installRemoteObservers()
         #endif
 
         let granted = await VoiceRecorder.requestPermission()
@@ -120,6 +157,8 @@ final class VoiceModeController: ObservableObject {
     func endSession() {
         isActive = false
         turnBusy = false
+        awaitingVoiceApproval = false
+        approvalPromptTries = 0
         waitTask?.cancel()
         waitTask = nil
         levelTask?.cancel()
@@ -132,12 +171,15 @@ final class VoiceModeController: ObservableObject {
         #if os(iOS)
         speakStream?.stop()
         speakStream = nil
+        removeRemoteObservers()
         #endif
         _ = recorder.stop(discard: true)
         player.stop(interrupted: false)
         phase = .idle
         liveTranscript = ""
         audioLevel = 0
+        silenceProgress = 0
+        isHearingSpeech = false
         releaseSessionBackground()
     }
 
@@ -197,7 +239,10 @@ final class VoiceModeController: ObservableObject {
     }
 
     private func retainSessionBackground(reason: String) {
-        guard !holdingSessionBackground else { return }
+        if holdingSessionBackground {
+            BackgroundRuntime.shared.updateNowPlaying(status: reason)
+            return
+        }
         holdingSessionBackground = true
         BackgroundRuntime.shared.retain(reason: reason)
     }
@@ -207,8 +252,77 @@ final class VoiceModeController: ObservableObject {
         holdingSessionBackground = false
         BackgroundRuntime.shared.release()
     }
+
+    private func refreshNowPlaying() {
+        guard holdingSessionBackground else { return }
+        let status = statusLabel
+        guard status != lastNowPlayingStatus else { return }
+        lastNowPlayingStatus = status
+        BackgroundRuntime.shared.updateNowPlaying(status: status)
+    }
+
+    private func installRemoteObservers() {
+        removeRemoteObservers()
+        let center = NotificationCenter.default
+        remoteObservers = [
+            center.addObserver(forName: .hermesVoiceRemoteToggle, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.primaryAction() }
+            },
+            center.addObserver(forName: .hermesVoiceRemotePause, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.handleRemotePause() }
+            },
+            center.addObserver(forName: .hermesVoiceRemotePlay, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.handleRemotePlay() }
+            },
+            center.addObserver(forName: .hermesVoiceRemoteStop, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.dismiss() }
+            },
+            center.addObserver(forName: .hermesAudioShouldResume, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.handleAudioResume() }
+            },
+        ]
+    }
+
+    private func removeRemoteObservers() {
+        let center = NotificationCenter.default
+        for obs in remoteObservers {
+            center.removeObserver(obs)
+        }
+        remoteObservers = []
+    }
+
+    private func handleRemotePause() {
+        switch phase {
+        case .listening:
+            Task { await finishTurn(force: true) }
+        case .speaking, .processing, .transcribing:
+            primaryAction()
+        default:
+            break
+        }
+    }
+
+    private func handleRemotePlay() {
+        switch phase {
+        case .idle, .error:
+            Task { await startSession() }
+        case .listening:
+            break
+        default:
+            primaryAction()
+        }
+    }
+
+    private func handleAudioResume() {
+        guard isActive else { return }
+        HermesAudioSession.reassertIfNeeded()
+        if case .listening = phase, !recorder.isRecording {
+            beginListening()
+        }
+    }
     #else
     private func releaseSessionBackground() {}
+    private func refreshNowPlaying() {}
     #endif
 
     // MARK: - Controles
@@ -247,6 +361,8 @@ final class VoiceModeController: ObservableObject {
         assistantCaption = "Continuando…"
         return
         #else
+        awaitingVoiceApproval = false
+        approvalPromptTries = 0
         if case .processing = phase {
             if vm?.isStreaming == true {
                 waitTask?.cancel()
@@ -255,6 +371,11 @@ final class VoiceModeController: ObservableObject {
                 }
             } else {
                 beginListening()
+            }
+        } else {
+            waitTask?.cancel()
+            waitTask = Task { [weak self] in
+                await self?.speakReplyDesktopStyle()
             }
         }
         #endif
@@ -291,10 +412,18 @@ final class VoiceModeController: ObservableObject {
                 switch self.phase {
                 case .listening:
                     self.audioLevel = self.recorder.audioLevel
+                    self.silenceProgress = self.recorder.silenceProgress
+                    self.isHearingSpeech = self.recorder.isHearingSpeech
+                    self.refreshNowPlaying()
                 case .speaking:
                     self.audioLevel = max(0.25, self.audioLevel * 0.9 + 0.15)
+                    self.silenceProgress = 0
+                    self.isHearingSpeech = false
                 case .transcribing, .processing:
                     self.audioLevel = 0.12
+                    self.silenceProgress = 0
+                    self.isHearingSpeech = false
+                    self.refreshNowPlaying()
                 default:
                     break
                 }
@@ -312,15 +441,23 @@ final class VoiceModeController: ObservableObject {
         player.stop(interrupted: false)
         _ = recorder.stop(discard: true)
         liveTranscript = ""
-        assistantCaption = ""
+        if !awaitingVoiceApproval {
+            assistantCaption = ""
+        }
         turnBusy = false
+        silenceProgress = 0
+        isHearingSpeech = false
         phase = .listening
+        refreshNowPlaying()
 
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 150_000_000)
+            // Folga curta para o TTS/eco do alto-falante não virar “fala”.
+            try? await Task.sleep(nanoseconds: 220_000_000)
             guard self.isActive, case .listening = self.phase else { return }
             do {
+                try HermesAudioSession.activatePlayAndRecord()
                 try self.recorder.start()
+                self.refreshNowPlaying()
             } catch {
                 self.phase = .error(error.localizedDescription)
             }
@@ -376,6 +513,18 @@ final class VoiceModeController: ObservableObject {
             }
 
             liveTranscript = transcript
+            #if os(iOS)
+            if awaitingVoiceApproval || vm?.pendingApproval != nil {
+                if Self.isStopCommand(transcript) {
+                    turnBusy = false
+                    dismiss()
+                    return
+                }
+                await handleVoiceApprovalReply(transcript)
+                return
+            }
+            #endif
+
             if Self.isStopCommand(transcript) {
                 turnBusy = false
                 dismiss()
@@ -491,9 +640,7 @@ final class VoiceModeController: ObservableObject {
         }
 
         if vm.pendingApproval != nil {
-            phase = .processing
-            assistantCaption = vm.pendingApproval?.message ?? "Aguardando aprovação…"
-            turnBusy = false
+            await presentVoiceApproval(vm.pendingApproval!)
             return
         }
 
@@ -504,6 +651,7 @@ final class VoiceModeController: ObservableObject {
             speakStream = stream
             phase = .speaking
             assistantCaption = "Gerando voz…"
+            refreshNowPlaying()
 
             let runTask = Task { await stream.run() }
             var spokenLength = 0
@@ -545,6 +693,11 @@ final class VoiceModeController: ObservableObject {
             streamOutcome = await runTask.value
             speakStream = nil
 
+            if vm.pendingApproval != nil {
+                await presentVoiceApproval(vm.pendingApproval!)
+                return
+            }
+
             if streamOutcome == .done {
                 turnBusy = false
                 if isActive { beginListening() }
@@ -560,9 +713,7 @@ final class VoiceModeController: ObservableObject {
             return
         }
         if vm.pendingApproval != nil {
-            phase = .processing
-            assistantCaption = vm.pendingApproval?.message ?? "Aguardando aprovação…"
-            turnBusy = false
+            await presentVoiceApproval(vm.pendingApproval!)
             return
         }
 
@@ -596,6 +747,7 @@ final class VoiceModeController: ObservableObject {
         assistantCaption = text
         phase = .speaking
         audioLevel = 0.3
+        refreshNowPlaying()
 
         guard let client = vm?.httpClient else {
             phase = .error("Sem conexão com o servidor Hermes.")
@@ -622,13 +774,128 @@ final class VoiceModeController: ObservableObject {
     private func latestAssistantText(from vm: HermesViewModel) -> String {
         vm.messages.last(where: { $0.role == .assistant && !$0.text.isEmpty })?.text ?? ""
     }
+
+    /// Anuncia a aprovação e volta a ouvir — handsfree total (sim/não).
+    private func presentVoiceApproval(_ approval: PendingApproval) async {
+        guard isActive else {
+            turnBusy = false
+            return
+        }
+        awaitingVoiceApproval = true
+        approvalPromptTries += 1
+        phase = .processing
+        assistantCaption = approval.message
+        refreshNowPlaying()
+
+        let prompt: String
+        if approvalPromptTries <= 1 {
+            prompt = "Preciso da sua aprovação. \(approval.message). Diga sim para aprovar, ou não para negar."
+        } else {
+            prompt = "Ainda aguardando. Diga sim para aprovar, ou não para negar."
+        }
+
+        turnBusy = false
+        await speakPromptThenListen(prompt)
+    }
+
+    private func handleVoiceApprovalReply(_ transcript: String) async {
+        guard let vm else {
+            turnBusy = false
+            beginListening()
+            return
+        }
+
+        if Self.isApproveCommand(transcript) {
+            awaitingVoiceApproval = false
+            approvalPromptTries = 0
+            phase = .processing
+            assistantCaption = "Aprovado. Continuando…"
+            turnBusy = false
+            await vm.respondApproval(allow: true)
+            resumeAfterApproval()
+            return
+        }
+
+        if Self.isDenyCommand(transcript) {
+            awaitingVoiceApproval = false
+            approvalPromptTries = 0
+            phase = .processing
+            assistantCaption = "Negado."
+            turnBusy = false
+            await vm.respondApproval(allow: false)
+            await speakPromptThenListen("Ok, neguei a ação.")
+            return
+        }
+
+        if approvalPromptTries >= 3 {
+            // Mantém o banner tocável e continua ouvindo.
+            turnBusy = false
+            beginListening()
+            return
+        }
+
+        if let approval = vm.pendingApproval {
+            await presentVoiceApproval(approval)
+        } else {
+            awaitingVoiceApproval = false
+            turnBusy = false
+            beginListening()
+        }
+    }
+
+    /// Fala um prompt sem reentrar no fluxo de resposta do agente; ao terminar, escuta.
+    private func speakPromptThenListen(_ text: String) async {
+        guard isActive, let client = vm?.httpClient else {
+            turnBusy = false
+            beginListening()
+            return
+        }
+        let speakable = SpeechSanitizer.sanitize(text)
+        guard !speakable.isEmpty else {
+            turnBusy = false
+            beginListening()
+            return
+        }
+
+        phase = .speaking
+        refreshNowPlaying()
+        do {
+            let audio = try await client.speakText(speakable)
+            guard isActive else { return }
+            try player.play(audio)
+            // onFinished → beginListening
+        } catch {
+            turnBusy = false
+            beginListening()
+        }
+    }
     #endif
 
     static func isStopCommand(_ text: String) -> Bool {
-        let normalized = text
+        let normalized = Self.normalizeVoiceCommand(text)
+        return stopPhrases.contains(normalized)
+    }
+
+    static func isApproveCommand(_ text: String) -> Bool {
+        let normalized = Self.normalizeVoiceCommand(text)
+        if approvePhrases.contains(normalized) { return true }
+        let tokens = normalized.split(separator: " ").map(String.init)
+        return tokens.contains(where: { approvePhrases.contains($0) })
+            && !tokens.contains(where: { denyPhrases.contains($0) })
+    }
+
+    static func isDenyCommand(_ text: String) -> Bool {
+        let normalized = Self.normalizeVoiceCommand(text)
+        if denyPhrases.contains(normalized) { return true }
+        let tokens = normalized.split(separator: " ").map(String.init)
+        return tokens.contains(where: { denyPhrases.contains($0) })
+    }
+
+    private static func normalizeVoiceCommand(_ text: String) -> String {
+        text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .trimmingCharacters(in: .punctuationCharacters)
-        return stopPhrases.contains(normalized)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
 }

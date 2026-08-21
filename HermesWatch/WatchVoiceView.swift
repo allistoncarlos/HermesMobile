@@ -81,6 +81,12 @@ struct WatchVoiceView: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
 
+            if case .listening = voice.phase, voice.silenceProgress > 0.1 {
+                ProgressView(value: Double(voice.silenceProgress))
+                    .tint(orbTint)
+                    .scaleEffect(0.8)
+            }
+
             Spacer(minLength: 0)
 
             orb

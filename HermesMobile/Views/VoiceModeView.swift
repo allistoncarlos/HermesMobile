@@ -75,7 +75,7 @@ struct VoiceModeView: View {
 
             Spacer()
 
-            Text("Modo de voz")
+            Text("Handsfree")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.7))
 
@@ -137,6 +137,14 @@ struct VoiceModeView: View {
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.white.opacity(0.55))
                 .animation(.easeInOut(duration: 0.2), value: voice.statusLabel)
+                .multilineTextAlignment(.center)
+
+            if case .listening = voice.phase, voice.silenceProgress > 0.08 {
+                ProgressView(value: Double(voice.silenceProgress))
+                    .tint(orbTint)
+                    .frame(maxWidth: 180)
+                    .animation(.linear(duration: 0.08), value: voice.silenceProgress)
+            }
 
             Text(displayText)
                 .font(.title3.weight(.regular))
@@ -146,6 +154,12 @@ struct VoiceModeView: View {
                 .frame(maxWidth: 340)
                 .animation(.easeOut(duration: 0.15), value: displayText)
 
+            if case .listening = voice.phase, vm.pendingApproval == nil {
+                Text("Pare de falar para enviar · diga “parar” para sair")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.38))
+            }
+
             if let approval = vm.pendingApproval {
                 ApprovalBanner(approval: approval) { allow in
                     Task {
@@ -154,6 +168,10 @@ struct VoiceModeView: View {
                     }
                 }
                 .padding(.top, 8)
+
+                Text("Ou diga “sim” / “não” sem tocar na tela")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.45))
             }
         }
         .padding(.horizontal, 8)
@@ -212,7 +230,12 @@ struct VoiceModeView: View {
     private var displayText: String {
         switch voice.phase {
         case .listening:
-            return " "
+            if vm.pendingApproval != nil {
+                return voice.assistantCaption.isEmpty
+                    ? "Aguardando sim ou não…"
+                    : voice.assistantCaption
+            }
+            return voice.isHearingSpeech ? " " : " "
         case .transcribing:
             return voice.liveTranscript.isEmpty ? "…" : voice.liveTranscript
         case .processing, .speaking:

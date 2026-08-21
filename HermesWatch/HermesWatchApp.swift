@@ -38,6 +38,9 @@ struct HermesWatchApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .hermesStartVoice)) { _ in
                     Task { await fulfillSiriVoiceLaunchIfNeeded() }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .hermesStopVoice)) { _ in
+                    fulfillSiriVoiceStopIfNeeded()
+                }
         }
     }
 
@@ -51,5 +54,12 @@ struct HermesWatchApp: App {
         // Pequeno atraso para o iPhone criar a sessão antes do primeiro turno.
         try? await Task.sleep(nanoseconds: 400_000_000)
         await voice.startSession()
+    }
+
+    @MainActor
+    private func fulfillSiriVoiceStopIfNeeded() {
+        guard HermesLaunchActions.shared.wantsStopVoice else { return }
+        HermesLaunchActions.shared.clearStopRequest()
+        voice.endSession()
     }
 }

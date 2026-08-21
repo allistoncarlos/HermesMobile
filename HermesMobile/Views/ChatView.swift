@@ -47,12 +47,16 @@ struct ChatView: View {
                 voice.speakServerPush(text)
             }
             Task { await fulfillSiriVoiceLaunchIfNeeded() }
+            fulfillSiriVoiceStopIfNeeded()
         }
         .onChange(of: vm.connectionState) { _, _ in
             Task { await fulfillSiriVoiceLaunchIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .hermesStartVoice)) { _ in
             Task { await fulfillSiriVoiceLaunchIfNeeded() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .hermesStopVoice)) { _ in
+            fulfillSiriVoiceStopIfNeeded()
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
@@ -358,6 +362,12 @@ struct ChatView: View {
         await vm.newSession()
         voice.attach(vm)
         voice.present()
+    }
+
+    private func fulfillSiriVoiceStopIfNeeded() {
+        guard HermesLaunchActions.shared.wantsStopVoice else { return }
+        HermesLaunchActions.shared.clearStopRequest()
+        voice.dismiss()
     }
 
     private func sendOrStop() {
