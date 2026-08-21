@@ -20,9 +20,9 @@ targets:
     info:
       path: HermesMobile/Resources/Info.plist
       properties:
-        CFBundleDisplayName: HermesMobile
+        CFBundleDisplayName: Hermes
         CFBundleShortVersionString: "1.0.1"
-        CFBundleVersion: "2"
+        CFBundleVersion: "3"
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
@@ -61,12 +61,13 @@ targets:
           - BackgroundRuntime.swift
       - path: HermesMobile/Companion
       - path: HermesMobile/Networking/Models.swift
+      - path: HermesMobile/Intents
     info:
       path: HermesWatch/Resources/Info.plist
       properties:
         CFBundleDisplayName: Hermes
         CFBundleShortVersionString: "1.0.1"
-        CFBundleVersion: "2"
+        CFBundleVersion: "3"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.hermesmobile.app
         WKRunsIndependentlyOfCompanionApp: false

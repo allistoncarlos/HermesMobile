@@ -46,6 +46,13 @@ struct ChatView: View {
             vm.onAssistantMessageComplete = { text in
                 voice.speakServerPush(text)
             }
+            Task { await fulfillSiriVoiceLaunchIfNeeded() }
+        }
+        .onChange(of: vm.connectionState) { _, _ in
+            Task { await fulfillSiriVoiceLaunchIfNeeded() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .hermesStartVoice)) { _ in
+            Task { await fulfillSiriVoiceLaunchIfNeeded() }
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
@@ -340,6 +347,17 @@ struct ChatView: View {
             && pendingAttachments.isEmpty
             && !vm.isStreaming
             && !isSending
+    }
+
+    /// Siri / App Shortcut: nova sessão + modo voz.
+    private func fulfillSiriVoiceLaunchIfNeeded() async {
+        guard HermesLaunchActions.shared.wantsVoiceSession else { return }
+        guard case .connected = vm.connectionState else { return }
+        HermesLaunchActions.shared.clearVoiceRequest()
+        inputFocused = false
+        await vm.newSession()
+        voice.attach(vm)
+        voice.present()
     }
 
     private func sendOrStop() {

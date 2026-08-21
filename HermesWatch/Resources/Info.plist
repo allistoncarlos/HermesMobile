@@ -19,7 +19,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.1</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -29,13 +29,13 @@
 	<string>O Hermes usa o microfone do Apple Watch para ouvir suas perguntas.</string>
 	<key>WKApplication</key>
 	<true/>
-	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.hermesmobile.app</string>
-	<key>WKRunsIndependentlyOfCompanionApp</key>
-	<false/>
 	<key>WKBackgroundModes</key>
 	<array>
 		<string>audio</string>
 	</array>
+	<key>WKCompanionAppBundleIdentifier</key>
+	<string>com.hermesmobile.app</string>
+	<key>WKRunsIndependentlyOfCompanionApp</key>
+	<false/>
 </dict>
 </plist>
