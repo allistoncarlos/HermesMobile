@@ -76,6 +76,147 @@ enum ChatRole: String, Codable {
     case system
 }
 
+/// Quem falou na conversa (usuário, Hermes, ou um bot/perfil como Atlas).
+struct ChatSpeaker: Equatable, Sendable {
+    var key: String
+    var displayName: String
+
+    static let user = ChatSpeaker(key: "user", displayName: "Você")
+    static let hermes = ChatSpeaker(key: "hermes", displayName: "Hermes")
+
+    static func assistantFallback(profile: String?) -> ChatSpeaker {
+        let trimmed = profile?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty || trimmed.lowercased() == "default" {
+            return .hermes
+        }
+        return ChatSpeaker(key: trimmed.lowercased(), displayName: Self.prettyName(trimmed))
+    }
+
+    static func prettyName(_ raw: String) -> String {
+        let cleaned = raw.replacingOccurrences(of: "_", with: " ").trimmingCharacters(in: .whitespaces)
+        guard !cleaned.isEmpty else { return "Hermes" }
+        return cleaned.split(separator: " ").map { part in
+            guard let first = part.first else { return String(part) }
+            return String(first).uppercased() + part.dropFirst().lowercased()
+        }.joined(separator: " ")
+    }
+
+    /// Extrai o falante do payload do gateway / histórico.
+    static func resolve(
+        from payload: JSONValue?,
+        sessionID: String = "",
+        profiles: [String: AgentProfileInfo] = [:],
+        fallback: ChatSpeaker = .hermes
+    ) -> ChatSpeaker {
+        let obj = payload?.objectValue ?? [:]
+        let keyFields = [
+            "profile", "profile_name", "profile_id",
+            "agent", "agent_name", "agent_id",
+            "speaker", "speaker_id", "speaker_name",
+            "bot", "bot_name", "bot_id",
+            "persona", "from_profile", "source_profile",
+        ]
+        var key: String?
+        for field in keyFields {
+            if let value = obj[field]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                key = value
+                break
+            }
+        }
+        if key == nil, let sidKey = profileKey(fromSessionID: sessionID) {
+            key = sidKey
+        }
+        let nameFields = ["display_name", "speaker_name", "bot_name", "title", "label"]
+        var name: String?
+        for field in nameFields {
+            if let value = obj[field]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                name = value
+                break
+            }
+        }
+        // `name` em subagent.* costuma ser a ferramenta; só usa se parecer um perfil.
+        if name == nil, let raw = obj["name"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty, raw.count <= 40, !raw.contains("."), !raw.contains("_task") {
+            name = raw
+            if key == nil { key = raw }
+        }
+        if let goal = obj["goal"]?.stringValue, key == nil || name == nil {
+            if let inferred = inferBot(from: goal), key == nil { key = inferred }
+        }
+        guard let resolvedKey = key?.lowercased(), !resolvedKey.isEmpty else {
+            return fallback
+        }
+        if resolvedKey == "user" { return .user }
+        if ["assistant", "hermes", "default", "system"].contains(resolvedKey) {
+            return profiles["default"].map {
+                ChatSpeaker(key: $0.name, displayName: $0.displayName)
+            } ?? fallback
+        }
+        if let profile = profiles[resolvedKey] {
+            return ChatSpeaker(key: profile.name, displayName: name ?? profile.displayName)
+        }
+        return ChatSpeaker(key: resolvedKey, displayName: name ?? prettyName(resolvedKey))
+    }
+
+    static func profileKey(fromSessionID sid: String) -> String? {
+        let first = sid.split(whereSeparator: { $0 == "/" || $0 == ":" }).first.map(String.init) ?? sid
+        let cleaned = first
+            .replacingOccurrences(of: "@session", with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@/ "))
+        guard !cleaned.isEmpty,
+              cleaned.lowercased() != "default",
+              cleaned.count < 48,
+              cleaned.rangeOfCharacter(from: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))) != nil
+        else { return nil }
+        if cleaned.contains("_") && cleaned.rangeOfCharacter(from: .decimalDigits) != nil && cleaned.count > 16 {
+            return nil
+        }
+        return cleaned.lowercased()
+    }
+
+    static func inferBot(from text: String) -> String? {
+        if let match = text.range(of: #"@([A-Za-z][A-Za-z0-9_-]{1,31})"#, options: .regularExpression) {
+            let raw = String(text[match]).dropFirst()
+            return String(raw).lowercased()
+        }
+        return nil
+    }
+
+    /// Prefixo típico do Bot Mode: `Message from 🤖 Atlas (@atlas): ...`
+    static func strippingDeliveryPrefix(_ text: String) -> (speaker: ChatSpeaker?, body: String) {
+        let pattern = #"^(?:Message from|Mensagem de)\s+(?:[^\n(]*\s+)?\(@?([A-Za-z0-9_-]+)\)\s*:\s*"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let keyRange = Range(match.range(at: 1), in: text) else {
+            return (nil, text)
+        }
+        let key = String(text[keyRange])
+        let body = String(text[Range(match.range, in: text)!.upperBound...])
+        return (ChatSpeaker(key: key.lowercased(), displayName: prettyName(key)), body)
+    }
+}
+
+/// Perfil/bot conhecido no gateway (`profiles.list`).
+struct AgentProfileInfo: Equatable, Identifiable, Sendable {
+    var id: String { name }
+    var name: String
+    var displayName: String
+    var summary: String?
+    var hasAvatar: Bool
+    var accentHex: String?
+    var isDefault: Bool = false
+    var lastSessionID: String? = nil
+    var canonicalSessionID: String? = nil
+    var lastPreview: String? = nil
+}
+
+/// Avatar em memória para um perfil.
+struct ProfileAvatar: Equatable, Sendable {
+    var imageData: Data
+}
+
 /// Uma chamada de ferramenta (tool) executada pelo agente durante o turno.
 struct ToolCall: Identifiable, Equatable {
     let id: UUID
@@ -171,6 +312,10 @@ struct ChatMessage: Identifiable, Equatable {
     var tools: [ToolCall]
     var status: String?         // "streaming" | "complete" | "error"
     var isStreaming: Bool
+    /// Identificador estável do falante (`atlas`, `hermes`, `user`…).
+    var speakerKey: String
+    /// Nome exibido acima da bolha (conversa em grupo).
+    var speakerName: String
 
     init(
         id: UUID = UUID(),
@@ -180,7 +325,8 @@ struct ChatMessage: Identifiable, Equatable {
         reasoning: String? = nil,
         tools: [ToolCall] = [],
         status: String? = nil,
-        isStreaming: Bool = false
+        isStreaming: Bool = false,
+        speaker: ChatSpeaker? = nil
     ) {
         self.id = id
         self.role = role
@@ -190,6 +336,13 @@ struct ChatMessage: Identifiable, Equatable {
         self.tools = tools
         self.status = status
         self.isStreaming = isStreaming
+        let resolved = speaker ?? (role == .user ? .user : .hermes)
+        self.speakerKey = resolved.key
+        self.speakerName = resolved.displayName
+    }
+
+    var speaker: ChatSpeaker {
+        ChatSpeaker(key: speakerKey, displayName: speakerName)
     }
 }
 
@@ -200,6 +353,43 @@ struct SessionSummary: Identifiable, Equatable {
     var startedAt: Date?
     var source: String?
     var isActive: Bool
+    var preview: String? = nil
+}
+
+/// Tipo de conversa no drawer (sessão normal, grupo WhatsApp-like, DM de bot).
+enum ChatKind: String, Equatable, Sendable {
+    case direct
+    case group
+    case bot
+}
+
+/// Membro de um chat em grupo sincronizado do desktop.
+struct GroupMember: Equatable, Identifiable, Sendable {
+    var id: String { key }
+    var key: String
+    var displayName: String
+}
+
+/// Chat em grupo (Vegapunk, etc.) espelhado do `ui_meta` do perfil default.
+struct GroupRoom: Equatable, Identifiable, Sendable {
+    var id: String { "group::\(name.lowercased())" }
+    var name: String
+    var members: [GroupMember]
+    var messages: [ChatMessage]
+    var preview: String?
+    var lastActivity: Date?
+    var imageDataURL: String?
+}
+
+struct DrawerPinItem: Identifiable {
+    enum Kind { case group, bot, direct }
+    let id: String
+    var title: String
+    var subtitle: String?
+    var kind: Kind
+    var room: GroupRoom?
+    var bot: AgentProfileInfo?
+    var session: SessionSummary?
 }
 
 /// Conversa aberta no cliente (pode haver várias ao mesmo tempo).
@@ -215,7 +405,14 @@ struct OpenChat: Identifiable, Equatable {
     var hasPendingClarify: Bool
     var pendingClarifyID: String?
     var lastAssistantIndex: Int?
+    /// session_id de subagentes cujo transcript entra neste chat.
+    var linkedSessionIDs: [String]
     var needsAttention: Bool    // badge quando outro chat pede ação / termina
+    var kind: ChatKind
+    var subtitle: String?
+    var lastActivity: Date?
+    /// Sessão gateway usada para envio quando `id` é sintético (`group::` / `bot::`).
+    var backingSessionID: String?
 
     init(
         id: String,
@@ -229,7 +426,12 @@ struct OpenChat: Identifiable, Equatable {
         hasPendingClarify: Bool = false,
         pendingClarifyID: String? = nil,
         lastAssistantIndex: Int? = nil,
-        needsAttention: Bool = false
+        linkedSessionIDs: [String] = [],
+        needsAttention: Bool = false,
+        kind: ChatKind = .direct,
+        subtitle: String? = nil,
+        lastActivity: Date? = nil,
+        backingSessionID: String? = nil
     ) {
         self.id = id
         self.storedSessionID = storedSessionID
@@ -242,7 +444,12 @@ struct OpenChat: Identifiable, Equatable {
         self.hasPendingClarify = hasPendingClarify
         self.pendingClarifyID = pendingClarifyID
         self.lastAssistantIndex = lastAssistantIndex
+        self.linkedSessionIDs = linkedSessionIDs
         self.needsAttention = needsAttention
+        self.kind = kind
+        self.subtitle = subtitle
+        self.lastActivity = lastActivity
+        self.backingSessionID = backingSessionID
     }
 }
 

@@ -11,6 +11,9 @@ struct MessageBubbleView: View {
     /// Status de atividade do turno (upload, pensando, ferramenta…).
     var activityText: String? = nil
     var isCompact: Bool = false
+    /// Esconde nome/avatar quando a bolha anterior é do mesmo bot (grupo WhatsApp).
+    var isGroupedWithPrevious: Bool = false
+    var avatarData: Data? = nil
 
     var body: some View {
         switch message.role {
@@ -52,11 +55,20 @@ struct MessageBubbleView: View {
 
 
     private var assistantRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            assistantAvatar
-                .padding(.top, 2)
+        HStack(alignment: .bottom, spacing: 8) {
+            if isGroupedWithPrevious {
+                Color.clear
+                    .frame(width: HermesTheme.avatarSize, height: HermesTheme.avatarSize)
+            } else {
+                speakerAvatar
+            }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                if !isGroupedWithPrevious {
+                    Text(message.speakerName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(HermesTheme.speakerAccent(for: message.speakerKey))
+                }
                 reasoningBlock
                 if showThinkingPlaceholder {
                     thinkingIndicator
@@ -71,18 +83,39 @@ struct MessageBubbleView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.top, isGroupedWithPrevious ? -6 : 0)
+        .accessibilityLabel("\(message.speakerName): \(message.text)")
     }
 
-    private var assistantAvatar: some View {
-        ZStack {
-            Circle()
-                .fill(HermesTheme.assistantAvatarFill)
-                .frame(width: HermesTheme.avatarSize, height: HermesTheme.avatarSize)
-            Image(systemName: "sparkles")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(HermesTheme.assistantAvatarForeground)
+    private var speakerAvatar: some View {
+        Group {
+            if let avatarData, let image = UIImage(data: avatarData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(HermesTheme.speakerAccent(for: message.speakerKey))
+                    Text(initials)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
         }
+        .frame(width: HermesTheme.avatarSize, height: HermesTheme.avatarSize)
+        .clipShape(Circle())
+        .overlay(
+            Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
         .accessibilityHidden(true)
+    }
+
+    private var initials: String {
+        let parts = message.speakerName.split(separator: " ")
+        let letters = parts.prefix(2).compactMap { $0.first.map(String.init) }
+        let value = letters.joined()
+        return value.isEmpty ? "H" : value.uppercased()
     }
 
     private var streamingCursor: String {

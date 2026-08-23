@@ -119,8 +119,8 @@ struct ChatView: View {
                 Text(vm.sessionTitle)
                     .font(metrics.isLandscape ? .subheadline.weight(.semibold) : .headline)
                     .lineLimit(1)
-                if let model = vm.sessionModel, !metrics.isLandscape {
-                    Text(model)
+                if let subtitle = vm.sessionSubtitle, !metrics.isLandscape {
+                    Text(subtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -184,12 +184,17 @@ struct ChatView: View {
                         emptyState(metrics: metrics)
                     }
                     ForEach(Array(vm.messages.enumerated()), id: \.element.id) { index, message in
-                        let isLastAssistant = message.role == .assistant
-                            && index == vm.messages.lastIndex(where: { $0.role == .assistant })
+                        let previous = index > 0 ? vm.messages[index - 1] : nil
+                        let grouped = message.role == .assistant
+                            && previous?.role == .assistant
+                            && previous?.speakerKey == message.speakerKey
+                        let showActivity = message.role == .assistant && message.isStreaming
                         MessageBubbleView(
                             message: message,
-                            activityText: isLastAssistant ? vm.toolStatusText : nil,
-                            isCompact: metrics.isLandscape && !metrics.isRegularWidth
+                            activityText: showActivity ? vm.toolStatusText : nil,
+                            isCompact: metrics.isLandscape && !metrics.isRegularWidth,
+                            isGroupedWithPrevious: grouped,
+                            avatarData: vm.avatarData(for: message.speakerKey)
                         )
                         .id(message.id)
                     }

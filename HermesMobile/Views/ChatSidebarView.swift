@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // ============================================================================
 //  ChatSidebarView — sidebar estilo ChatGPT com List + swipeActions nativos
@@ -31,6 +32,142 @@ struct ChatSidebarView: View {
         return vm.sessions.filter { !openStored.contains($0.id) && !openIDs.contains($0.id) }
     }
 
+    private var pinnedItems: [DrawerPinItem] {
+        vm.pinnedIDs.compactMap { id in
+            if let room = vm.groupRooms.first(where: { $0.id == id }) {
+                return DrawerPinItem(id: id, title: room.name, subtitle: room.preview ?? "Grupo", kind: .group, room: room, bot: nil, session: nil)
+            }
+            if id.hasPrefix("bot::"),
+               let bot = vm.drawerBots.first(where: { vm.pinKey(forBot: $0.name) == id }) {
+                return DrawerPinItem(id: id, title: bot.displayName, subtitle: bot.lastPreview ?? bot.summary ?? "Bot", kind: .bot, room: nil, bot: bot, session: nil)
+            }
+            if let chat = vm.openChats.first(where: { $0.id == id || $0.storedSessionID == id }) {
+                return DrawerPinItem(id: id, title: chat.title, subtitle: chat.subtitle ?? "Conversa", kind: .direct, room: nil, bot: nil, session: nil)
+            }
+            if let session = vm.sessions.first(where: { $0.id == id }) {
+                return DrawerPinItem(id: id, title: session.title, subtitle: session.preview ?? "Conversa", kind: .direct, room: nil, bot: nil, session: session)
+            }
+            return nil
+        }
+    }
+
+    private func pinButton(_ id: String) -> some View {
+        Button {
+            vm.togglePin(id)
+        } label: {
+            Label(vm.isPinned(id) ? "Desafixar" : "Fixar", systemImage: vm.isPinned(id) ? "pin.slash" : "pin")
+        }
+        .tint(.yellow)
+    }
+
+    private func drawerRow(_ item: DrawerPinItem) -> some View {
+        Button {
+            Task {
+                if let room = item.room { await vm.openGroupRoom(room) }
+                else if let bot = item.bot { await vm.openBotProfile(bot) }
+                else if let session = item.session { await vm.resumeSession(session) }
+                else { await vm.selectChat(item.id) }
+            }
+        } label: {
+            conversationRow(
+                title: item.title,
+                subtitle: item.subtitle,
+                systemImage: item.kind == .group ? "person.3.fill" : (item.kind == .bot ? "cpu" : "pin.fill"),
+                isActive: vm.activeChatID == item.id
+            )
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .leading) { pinButton(item.id) }
+        .listRowBackground(vm.activeChatID == item.id ? HermesTheme.rowHover : Color.clear)
+    }
+
+    private func groupRow(_ room: GroupRoom) -> some View {
+        Button {
+            Task { await vm.openGroupRoom(room) }
+        } label: {
+            conversationRow(
+                title: room.name,
+                subtitle: room.preview ?? room.members.map(\.displayName).joined(separator: ", "),
+                systemImage: "person.3.fill",
+                isActive: vm.activeChatID == room.id,
+                showPin: vm.isPinned(room.id)
+            )
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .leading) { pinButton(room.id) }
+        .listRowBackground(vm.activeChatID == room.id ? HermesTheme.rowHover : Color.clear)
+    }
+
+    private func botRow(_ bot: AgentProfileInfo) -> some View {
+        let key = vm.pinKey(forBot: bot.name)
+        return Button {
+            Task { await vm.openBotProfile(bot) }
+        } label: {
+            conversationRow(
+                title: bot.displayName,
+                subtitle: bot.lastPreview ?? bot.summary ?? "Bot",
+                systemImage: "cpu",
+                isActive: vm.activeChatID == key,
+                avatarKey: bot.name,
+                showPin: vm.isPinned(key)
+            )
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .leading) { pinButton(key) }
+        .listRowBackground(vm.activeChatID == key ? HermesTheme.rowHover : Color.clear)
+    }
+
+    private func conversationRow(
+        title: String,
+        subtitle: String?,
+        systemImage: String,
+        isActive: Bool,
+        avatarKey: String? = nil,
+        showPin: Bool = false
+    ) -> some View {
+        HStack(spacing: 10) {
+            if let avatarKey, let data = vm.avatarData(for: avatarKey), let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 34, height: 34)
+                    .clipShape(Circle())
+            } else {
+                Image(systemName: systemImage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(HermesTheme.rowHover))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    if showPin {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            if isActive {
+                Image(systemName: "checkmark")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -42,10 +179,37 @@ struct ChatSidebarView: View {
                         .listRowBackground(Color.clear)
                 }
 
+                if !pinnedItems.isEmpty {
+                    Section("Fixadas") {
+                        ForEach(pinnedItems) { item in
+                            drawerRow(item)
+                        }
+                    }
+                }
+
+                if !vm.groupRooms.isEmpty {
+                    Section("Chats em grupo") {
+                        ForEach(vm.groupRooms) { room in
+                            groupRow(room)
+                        }
+                    }
+                }
+
+                if !vm.drawerBots.isEmpty {
+                    Section("Bots") {
+                        ForEach(vm.drawerBots) { bot in
+                            botRow(bot)
+                        }
+                    }
+                }
+
                 if !meaningfulOpenChats.isEmpty {
                     Section("Abertas") {
                         ForEach(meaningfulOpenChats) { chat in
                             openChatRow(chat)
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    pinButton(vm.isPinned(chat.id) ? chat.id : chat.storedSessionID ?? chat.id)
+                                }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         pendingDelete = PendingDelete(
@@ -77,6 +241,9 @@ struct ChatSidebarView: View {
                     } else {
                         ForEach(historySessions) { session in
                             historyRow(session)
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    pinButton(session.id)
+                                }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         pendingDelete = PendingDelete(
@@ -103,6 +270,7 @@ struct ChatSidebarView: View {
             .scrollContentBackground(.hidden)
             .refreshable {
                 await vm.loadSessions()
+                await vm.refreshRoster()
             }
 
             Divider()

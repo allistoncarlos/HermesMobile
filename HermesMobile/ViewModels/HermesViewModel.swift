@@ -21,6 +21,14 @@ final class HermesViewModel: ObservableObject {
     @Published var showSidebar: Bool = false
     /// Só true após logout, “trocar servidor” ou senha inválida — aí a UI de login aparece.
     @Published var needsManualAuth: Bool = false
+    /// Perfis/bots do gateway (`profiles.list`), indexados pelo nome.
+    @Published var profilesByName: [String: AgentProfileInfo] = [:]
+    /// Bytes de avatar por perfil (PNG/JPEG/WebP).
+    @Published var avatarDataByProfile: [String: Data] = [:]
+    /// Chats em grupo sincronizados do desktop (Vegapunk e afins).
+    @Published var groupRooms: [GroupRoom] = []
+    /// IDs fixados no drawer (`group::vegapunk`, `bot::atlas`, session id).
+    @Published var pinnedIDs: [String] = []
     /// Chamado quando o assistente completa uma mensagem (para TTS em background).
     var onAssistantMessageComplete: ((String) -> Void)?
 
@@ -42,10 +50,13 @@ final class HermesViewModel: ObservableObject {
     private var connectInFlight = false
     /// Evita loop de reconnect automático em queda de WS.
     private var autoReconnectInFlight = false
+    private static let pinnedIDsKey = "hermes.drawerPinnedIDs"
     #if os(iOS)
     /// Hold de BackgroundRuntime enquanto algum chat está em streaming.
     private var turnBackgroundHeld = false
     #endif
+    /// session_id de um bot em background → chat onde a fala deve aparecer.
+    private var childSessionParents: [String: String] = [:]
 
     /// URL do WebSocket de TTS streaming (mesmo auth do `/api/ws`).
     func makeSpeakStreamURL() async throws -> URL {
@@ -66,6 +77,7 @@ final class HermesViewModel: ObservableObject {
         } else {
             SessionCookieStore.restore()
         }
+        pinnedIDs = UserDefaults.standard.stringArray(forKey: Self.pinnedIDsKey) ?? []
         if config.hasSavedConfig && config.hasRestorableAuth {
             connectionState = .connecting
         }
@@ -98,6 +110,11 @@ final class HermesViewModel: ObservableObject {
 
     var messages: [ChatMessage] { activeChat?.messages ?? [] }
     var sessionTitle: String { activeChat?.title ?? "Nova conversa" }
+    var sessionSubtitle: String? {
+        if let sub = activeChat?.subtitle, !sub.isEmpty { return sub }
+        if activeChat?.kind != .group { return activeChat?.model }
+        return nil
+    }
     var sessionModel: String? { activeChat?.model }
     var toolStatusText: String? { activeChat?.toolStatusText }
     var pendingApproval: PendingApproval? { activeChat?.pendingApproval }
@@ -262,6 +279,7 @@ final class HermesViewModel: ObservableObject {
         activeChatID = nil
         await createSession()
         await loadSessions()
+        await loadProfiles()
         syncCompanion()
         #if os(iOS)
         await HermesNotifier.shared.requestAuthorizationIfNeeded()
@@ -673,7 +691,25 @@ final class HermesViewModel: ObservableObject {
                     if let text = m["content"]?.stringValue ?? m["text"]?.stringValue,
                        let roleRaw = m["role"]?.stringValue {
                         let role = ChatRole(rawValue: roleRaw) ?? .assistant
-                        chat.messages.append(ChatMessage(role: role, text: text))
+                        let (prefixSpeaker, body) = ChatSpeaker.strippingDeliveryPrefix(text)
+                        let speaker: ChatSpeaker
+                        if role == .user {
+                            speaker = .user
+                        } else if let prefixSpeaker {
+                            speaker = prefixSpeaker
+                        } else {
+                            speaker = ChatSpeaker.resolve(
+                                from: m,
+                                sessionID: sid,
+                                profiles: profilesByName,
+                                fallback: .hermes
+                            )
+                        }
+                        if role == .assistant || role == .system {
+                            chat.messages.append(ChatMessage(role: role, text: body, speaker: speaker))
+                        } else {
+                            chat.messages.append(ChatMessage(role: role, text: text, speaker: speaker))
+                        }
                     }
                 }
             }
@@ -701,7 +737,8 @@ final class HermesViewModel: ObservableObject {
 
     /// Conversa sem mensagens de usuário (ainda não começou de verdade).
     static func isBlankChat(_ chat: OpenChat) -> Bool {
-        !chat.messages.contains { $0.role == .user }
+        if chat.kind != .direct { return false }
+        return !chat.messages.contains { $0.role == .user }
             && !chat.isStreaming
             && chat.pendingApproval == nil
             && !chat.hasPendingClarify
@@ -751,10 +788,21 @@ final class HermesViewModel: ObservableObject {
             return
         }
 
+        do {
+            if chat.kind == .group || chat.kind == .bot {
+                chat = try await ensureBackingSession(chat)
+            }
+        } catch {
+            statusMessage = error.localizedDescription
+            return
+        }
+
+        let rpcSessionID = chat.backingSessionID ?? chat.id
+
         // Bolha do usuário só guarda preview leve — bytes completos ficam só no upload.
         let displayAttachments = attachments.map { $0.forDisplay() }
-        chat.messages.append(ChatMessage(role: .user, text: text, attachments: displayAttachments))
-        let assistant = ChatMessage(role: .assistant, text: "", status: "streaming", isStreaming: true)
+        chat.messages.append(ChatMessage(role: .user, text: text, attachments: displayAttachments, speaker: .user))
+        let assistant = ChatMessage(role: .assistant, text: "", status: "streaming", isStreaming: true, speaker: .hermes)
         chat.messages.append(assistant)
         chat.lastAssistantIndex = chat.messages.count - 1
         chat.toolStatusText = attachments.isEmpty ? "Pensando…" : "Enviando anexos…"
@@ -764,14 +812,18 @@ final class HermesViewModel: ObservableObject {
         statusMessage = nil
 
         do {
-            let promptText = try await uploadAttachments(attachments, sessionID: chat.id, visibleText: text)
+            var promptText = try await uploadAttachments(attachments, sessionID: rpcSessionID, visibleText: text)
+            if chat.kind == .group {
+                let members = chat.subtitle ?? ""
+                promptText = "[Chat em grupo: \(chat.title). Participantes: \(members)]\n\n" + promptText
+            }
             if var updated = self.chat(for: chat.id) {
                 updated.toolStatusText = "Pensando…"
                 commit(updated)
             }
             _ = try await ws.call(
                 method: "prompt.submit",
-                params: ["session_id": .string(chat.id), "text": .string(promptText)],
+                params: ["session_id": .string(rpcSessionID), "text": .string(promptText)],
                 timeoutSeconds: Self.attachTimeoutSeconds
             )
         } catch {
@@ -957,31 +1009,44 @@ final class HermesViewModel: ObservableObject {
             if !connectionIsError() {
                 connectionState = .connected
             }
+            Task { await loadProfiles() }
             return
         }
 
-        let sid = event.sessionID
+        let originalSID = event.sessionID
+        rememberSessionLinks(event)
+        let sid = resolveTargetSession(event)
         // Se não temos chat para esse session_id, ignora (exceto se for o ativo implícito).
-        guard !sid.isEmpty, chatIndex(for: sid) != nil || openChats.isEmpty == false else {
-            // Tenta associar a eventos sem session em chat ativo.
-            if sid.isEmpty, let active = activeChatID {
-                handle(event, for: active)
+        guard !sid.isEmpty, chatIndex(for: sid) != nil || !openChats.isEmpty else {
+            if originalSID.isEmpty, let active = activeChatID {
+                handle(event, for: active, originalSessionID: originalSID)
             }
             return
         }
 
         let target = sid.isEmpty ? (activeChatID ?? "") : sid
         guard !target.isEmpty else { return }
-        handle(event, for: target)
+        handle(event, for: target, originalSessionID: originalSID)
     }
 
-    private func handle(_ event: HermesEvent, for sessionID: String) {
-        // Garante que o chat existe ou cria um stub se o servidor emitir em sessão nova.
+    private func handle(_ event: HermesEvent, for sessionID: String, originalSessionID: String? = nil) {
+        let origin = originalSessionID ?? event.sessionID
+        // Bots em background: não abrir um chat novo na sidebar — fala no thread atual.
         if chatIndex(for: sessionID) == nil {
+            if shouldJoinActiveThread(event, sessionID: sessionID), let active = activeChatID {
+                handle(event, for: active, originalSessionID: origin)
+                return
+            }
             openChats.append(OpenChat(id: sessionID, title: "Conversa"))
         }
         guard var chat = chat(for: sessionID) else { return }
         let isBackground = sessionID != activeChatID
+        let speaker = ChatSpeaker.resolve(
+            from: event.payload,
+            sessionID: origin,
+            profiles: profilesByName,
+            fallback: .hermes
+        )
 
         switch event.type {
         case "session.info":
@@ -998,19 +1063,18 @@ final class HermesViewModel: ObservableObject {
             if isBackground { chat.needsAttention = true }
 
         case "message.start":
-            ensureAssistantBubble(in: &chat)
+            ensureAssistantBubble(in: &chat, speaker: speaker)
             chat.toolStatusText = nil
 
         case "message.delta":
             if let text = event.payload["text"]?.stringValue {
-                appendToAssistant(&chat, text)
+                appendToAssistant(&chat, text, speaker: speaker)
                 chat.toolStatusText = nil
             }
 
         case "reasoning.delta":
             if let text = event.payload["text"]?.stringValue {
-                appendReasoning(&chat, text)
-                // Mantém indicação de raciocínio enquanto ainda não há resposta.
+                appendReasoning(&chat, text, speaker: speaker)
                 let assistantTextEmpty: Bool = {
                     guard let i = chat.lastAssistantIndex, i < chat.messages.count else { return true }
                     return chat.messages[i].text.isEmpty
@@ -1020,7 +1084,8 @@ final class HermesViewModel: ObservableObject {
 
         case "message.complete":
             if let text = event.payload["text"]?.stringValue, !text.isEmpty {
-                setAssistantText(&chat, text)
+                let (prefixSpeaker, body) = ChatSpeaker.strippingDeliveryPrefix(text)
+                setAssistantText(&chat, body, speaker: prefixSpeaker ?? speaker)
             }
             let status = event.payload["status"]?.stringValue ?? "complete"
             markAssistant(&chat, status: status)
@@ -1059,7 +1124,7 @@ final class HermesViewModel: ObservableObject {
         case "tool.start":
             if let name = event.payload["name"]?.stringValue {
                 let call = ToolCall(name: name, status: "running")
-                ensureAssistantBubble(in: &chat)
+                ensureAssistantBubble(in: &chat, speaker: speaker)
                 if let i = chat.lastAssistantIndex, i < chat.messages.count {
                     chat.messages[i].tools.append(call)
                 }
@@ -1132,6 +1197,87 @@ final class HermesViewModel: ObservableObject {
             chat.toolStatusText = nil
             if isBackground { chat.needsAttention = true }
 
+        case "subagent.start", "subagent.started", "background.start",
+             "delegation.start", "delegate.start":
+            var botSpeaker = speaker
+            if botSpeaker.key == "hermes" {
+                let goal = event.payload["goal"]?.stringValue
+                    ?? event.payload["task"]?.stringValue
+                    ?? event.payload["label"]?.stringValue
+                if let goal, let inferred = ChatSpeaker.inferBot(from: goal) {
+                    botSpeaker = ChatSpeaker.resolve(
+                        from: nil,
+                        sessionID: inferred,
+                        profiles: profilesByName,
+                        fallback: ChatSpeaker(key: inferred, displayName: ChatSpeaker.prettyName(inferred))
+                    )
+                } else if let label = event.payload["label"]?.stringValue, !label.isEmpty {
+                    botSpeaker = ChatSpeaker(key: label.lowercased(), displayName: ChatSpeaker.prettyName(label))
+                }
+            }
+            ensureAssistantBubble(in: &chat, speaker: botSpeaker, forceNew: true)
+            if let goal = event.payload["goal"]?.stringValue ?? event.payload["task"]?.stringValue {
+                chat.toolStatusText = "\(botSpeaker.displayName): \(goal)"
+            } else {
+                chat.toolStatusText = "\(botSpeaker.displayName) está trabalhando…"
+            }
+            chat.isStreaming = true
+            if let child = event.payload["child_session_id"]?.stringValue
+                ?? event.payload["session_id"]?.stringValue {
+                if !chat.linkedSessionIDs.contains(child) {
+                    chat.linkedSessionIDs.append(child)
+                }
+                childSessionParents[child] = chat.id
+            }
+
+        case "subagent.delta", "subagent.text", "subagent.message", "background.delta":
+            if let text = event.payload["text"]?.stringValue ?? event.payload["delta"]?.stringValue {
+                appendToAssistant(&chat, text, speaker: speaker, forceNewIfIdle: true)
+            }
+
+        case "subagent.thinking", "subagent.reasoning":
+            if let text = event.payload["text"]?.stringValue {
+                appendReasoning(&chat, text, speaker: speaker, forceNewIfIdle: true)
+            }
+
+        case "subagent.tool", "subagent.progress":
+            if let name = event.payload["name"]?.stringValue
+                ?? event.payload["tool"]?.stringValue
+                ?? event.payload["tool_name"]?.stringValue {
+                let call = ToolCall(name: name, status: "running")
+                ensureAssistantBubble(in: &chat, speaker: speaker, forceNew: false)
+                if let i = chat.lastAssistantIndex, i < chat.messages.count,
+                   !chat.messages[i].tools.contains(where: { $0.name == name && $0.status == "running" }) {
+                    chat.messages[i].tools.append(call)
+                }
+                chat.toolStatusText = "\(speaker.displayName) · \(name)"
+            }
+
+        case "subagent.complete", "subagent.done", "background.complete",
+             "delegation.complete", "delegate.complete":
+            let raw = event.payload["summary"]?.stringValue
+                ?? event.payload["text"]?.stringValue
+                ?? event.payload["result"]?.stringValue
+            if let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let (_, body) = ChatSpeaker.strippingDeliveryPrefix(raw)
+                setAssistantText(&chat, body, speaker: speaker)
+            }
+            markAssistant(&chat, status: event.payload["status"]?.stringValue ?? "complete")
+            chat.toolStatusText = nil
+            if isBackground { chat.needsAttention = true }
+            #if os(iOS)
+            if let preview = event.payload["summary"]?.stringValue ?? event.payload["text"]?.stringValue {
+                let trimmed = preview.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    HermesNotifier.shared.notifyReplyReady(
+                        sessionID: sessionID,
+                        title: speaker.displayName,
+                        body: trimmed
+                    )
+                }
+            }
+            #endif
+
         default:
             break
         }
@@ -1141,7 +1287,9 @@ final class HermesViewModel: ObservableObject {
 
 
     private func chatIndex(for id: String) -> Int? {
-        openChats.firstIndex(where: { $0.id == id })
+        openChats.firstIndex(where: {
+            $0.id == id || $0.backingSessionID == id || $0.linkedSessionIDs.contains(id)
+        })
     }
 
     private func chat(for id: String) -> OpenChat? {
@@ -1180,37 +1328,51 @@ final class HermesViewModel: ObservableObject {
         commit(chat)
     }
 
-    private func ensureAssistantBubble(in chat: inout OpenChat) {
-        if chat.lastAssistantIndex == nil {
-            let a = ChatMessage(role: .assistant, text: "", status: "streaming", isStreaming: true)
-            chat.messages.append(a)
-            chat.lastAssistantIndex = chat.messages.count - 1
-        } else if let i = chat.lastAssistantIndex, i < chat.messages.count {
+    private func ensureAssistantBubble(in chat: inout OpenChat, speaker: ChatSpeaker = .hermes, forceNew: Bool = false) {
+        if !forceNew,
+           let i = chat.messages.lastIndex(where: {
+               $0.role == .assistant && $0.speakerKey == speaker.key && $0.isStreaming
+           }) {
+            chat.lastAssistantIndex = i
             var m = chat.messages[i]
             m.status = "streaming"
             m.isStreaming = true
+            if m.speakerName.isEmpty { m.speakerName = speaker.displayName }
             chat.messages[i] = m
+            return
         }
+        let a = ChatMessage(role: .assistant, text: "", status: "streaming", isStreaming: true, speaker: speaker)
+        chat.messages.append(a)
+        chat.lastAssistantIndex = chat.messages.count - 1
     }
 
-    private func appendToAssistant(_ chat: inout OpenChat, _ text: String) {
-        ensureAssistantBubble(in: &chat)
+    private func appendToAssistant(_ chat: inout OpenChat, _ text: String, speaker: ChatSpeaker = .hermes, forceNewIfIdle: Bool = false) {
+        ensureAssistantBubble(in: &chat, speaker: speaker, forceNew: false)
         guard let i = chat.lastAssistantIndex, i < chat.messages.count else { return }
-        chat.messages[i].text += text
-        chat.messages[i].isStreaming = true
-        chat.messages[i].status = "streaming"
+        if forceNewIfIdle, chat.messages[i].speakerKey != speaker.key {
+            ensureAssistantBubble(in: &chat, speaker: speaker, forceNew: true)
+        }
+        guard let idx = chat.lastAssistantIndex, idx < chat.messages.count else { return }
+        chat.messages[idx].text += text
+        chat.messages[idx].isStreaming = true
+        chat.messages[idx].status = "streaming"
     }
 
-    private func appendReasoning(_ chat: inout OpenChat, _ text: String) {
-        ensureAssistantBubble(in: &chat)
+    private func appendReasoning(_ chat: inout OpenChat, _ text: String, speaker: ChatSpeaker = .hermes, forceNewIfIdle: Bool = false) {
+        ensureAssistantBubble(in: &chat, speaker: speaker, forceNew: false)
+        if forceNewIfIdle, let i = chat.lastAssistantIndex, chat.messages[i].speakerKey != speaker.key {
+            ensureAssistantBubble(in: &chat, speaker: speaker, forceNew: true)
+        }
         guard let i = chat.lastAssistantIndex, i < chat.messages.count else { return }
         chat.messages[i].reasoning = (chat.messages[i].reasoning ?? "") + text
     }
 
-    private func setAssistantText(_ chat: inout OpenChat, _ text: String) {
-        ensureAssistantBubble(in: &chat)
+    private func setAssistantText(_ chat: inout OpenChat, _ text: String, speaker: ChatSpeaker = .hermes) {
+        ensureAssistantBubble(in: &chat, speaker: speaker)
         guard let i = chat.lastAssistantIndex, i < chat.messages.count else { return }
         chat.messages[i].text = text
+        chat.messages[i].speakerKey = speaker.key
+        chat.messages[i].speakerName = speaker.displayName
     }
 
     private func markAssistant(_ chat: inout OpenChat, status: String) {
@@ -1301,5 +1463,347 @@ final class HermesViewModel: ObservableObject {
             }
             return "Não foi possível falar com o servidor (\(base.absoluteString)): \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Perfis / bots em background
+
+    func avatarData(for speakerKey: String) -> Data? {
+        avatarDataByProfile[speakerKey]
+            ?? avatarDataByProfile[speakerKey.lowercased()]
+    }
+
+
+    // MARK: - Drawer: grupos, bots e pins
+
+    func isPinned(_ id: String) -> Bool { pinnedIDs.contains(id) }
+
+    func togglePin(_ id: String) {
+        if let idx = pinnedIDs.firstIndex(of: id) {
+            pinnedIDs.remove(at: idx)
+        } else {
+            pinnedIDs.insert(id, at: 0)
+        }
+        UserDefaults.standard.set(pinnedIDs, forKey: Self.pinnedIDsKey)
+    }
+
+    var drawerBots: [AgentProfileInfo] {
+        profilesByName.values.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+    }
+
+    func pinKey(forBot name: String) -> String { "bot::\(name.lowercased())" }
+
+    func refreshRoster() async {
+        await loadProfiles()
+    }
+
+    func openGroupRoom(_ room: GroupRoom) async {
+        if let existing = openChats.first(where: { $0.id == room.id }) {
+            var updated = existing
+            updated.messages = room.messages
+            updated.subtitle = room.members.map(\.displayName).joined(separator: ", ")
+            updated.lastActivity = room.lastActivity
+            commit(updated)
+            await selectChat(room.id)
+            return
+        }
+        pruneBlankOpenChats(keeping: room.id)
+        let chat = OpenChat(
+            id: room.id,
+            title: room.name,
+            messages: room.messages,
+            kind: .group,
+            subtitle: room.members.map(\.displayName).joined(separator: ", "),
+            lastActivity: room.lastActivity
+        )
+        openChats.append(chat)
+        await selectChat(room.id)
+    }
+
+    func openBotProfile(_ profile: AgentProfileInfo) async {
+        let key = pinKey(forBot: profile.name)
+        if let existing = openChats.first(where: { $0.id == key || $0.kind == .bot && $0.title == profile.displayName }) {
+            await selectChat(existing.id)
+            return
+        }
+        if let sid = profile.canonicalSessionID ?? profile.lastSessionID, !sid.isEmpty {
+            await resumeSession(SessionSummary(id: sid, title: profile.displayName, startedAt: nil, source: profile.name, isActive: false))
+            if var chat = openChats.first(where: { $0.id == sid || $0.storedSessionID == sid }) {
+                chat.kind = .bot
+                chat.subtitle = profile.summary
+                commit(chat)
+            }
+            return
+        }
+        pruneBlankOpenChats(keeping: key)
+        var chat = OpenChat(id: key, title: profile.displayName, kind: .bot, subtitle: profile.summary)
+        do {
+            chat = try await ensureBackingSession(chat)
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+        if let i = openChats.firstIndex(where: { $0.id == chat.id }) {
+            openChats[i] = chat
+        } else {
+            openChats.append(chat)
+        }
+        await selectChat(chat.id)
+    }
+
+    private func ensureBackingSession(_ chat: OpenChat) async throws -> OpenChat {
+        var chat = chat
+        if let sid = chat.backingSessionID, !sid.isEmpty { return chat }
+        guard let ws else { throw HermesClientError(message: "Sem conexão com o servidor.") }
+        var params: [String: JSONValue] = ["cols": .number(80)]
+        if chat.kind == .bot {
+            let name = chat.id.hasPrefix("bot::") ? String(chat.id.dropFirst(5)) : chat.title.lowercased()
+            params["profile"] = .string(name)
+        }
+        let result: JSONValue
+        do {
+            result = try await ws.call(method: "session.create", params: params)
+        } catch {
+            if params["profile"] != nil {
+                result = try await ws.call(method: "session.create", params: ["cols": .number(80)])
+            } else {
+                throw error
+            }
+        }
+        guard let sid = result["session_id"]?.stringValue else {
+            throw HermesClientError(message: "O servidor não devolveu session_id.")
+        }
+        chat.backingSessionID = sid
+        chat.storedSessionID = result["stored_session_id"]?.stringValue ?? sid
+        if !chat.linkedSessionIDs.contains(sid) {
+            chat.linkedSessionIDs.append(sid)
+        }
+        childSessionParents[sid] = chat.id
+        commit(chat)
+        return chat
+    }
+
+    private func parseGroupRooms(from profiles: [JSONValue]) -> [GroupRoom] {
+        var rooms: [GroupRoom] = []
+        for row in profiles {
+            let meta = row["ui_meta"] ?? row["ui_meta"] ?? row["meta"]
+            let blob = meta?["hermes-bots-groups"]
+                ?? meta?["hermes-bots-groups"]
+                ?? row["hermes-bots-groups"]
+            guard let blob else { continue }
+            rooms.append(contentsOf: Self.rooms(fromSyncBlob: blob))
+        }
+        var unique: [String: GroupRoom] = [:]
+        for room in rooms { unique[room.id] = room }
+        return unique.values.sorted {
+            ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast)
+        }
+    }
+
+    private static func rooms(fromSyncBlob blob: JSONValue) -> [GroupRoom] {
+        let root = blob.objectValue ?? [:]
+        var dict = root["rooms"]?.objectValue ?? [:]
+        if dict.isEmpty, let arr = root["rooms"]?.arrayValue {
+            for item in arr {
+                let name = item["name"]?.stringValue ?? ""
+                if !name.isEmpty { dict[name] = item }
+            }
+        }
+        if dict.isEmpty {
+            dict = root.filter { key, value in
+                key != "version" && key != "deleted" && key != "updatedAt" && value.objectValue != nil
+            }
+        }
+        var rooms: [GroupRoom] = []
+        for (key, value) in dict {
+            guard let obj = value.objectValue else { continue }
+            let name = obj["name"]?.stringValue
+                ?? key.split(separator: ":").last.map(String.init)
+                ?? key
+            guard !name.isEmpty else { continue }
+            let members: [GroupMember] = (obj["members"]?.arrayValue ?? []).compactMap { item in
+                let n = item["name"]?.stringValue ?? item["handle"]?.stringValue ?? ""
+                guard !n.isEmpty else { return nil }
+                return GroupMember(key: n.lowercased(), displayName: ChatSpeaker.prettyName(n))
+            }
+            let log = obj["log"] ?? obj["messages"]
+            let messages: [ChatMessage] = (log?.arrayValue ?? []).compactMap { entry in
+                Self.message(fromGroupLog: entry)
+            }
+            let last = messages.last
+            let preview: String? = {
+                guard let last else { return members.isEmpty ? nil : "\(members.count) bots" }
+                if last.role == .user { return last.text }
+                return "\(last.speakerName): \(last.text)"
+            }()
+            let lastAt: Date? = {
+                if let n = obj["updatedAt"]?.number ?? obj["updated_at"]?.number {
+                    return Date(timeIntervalSince1970: n > 20_000_000_000 ? n / 1000 : n)
+                }
+                return nil
+            }()
+            rooms.append(GroupRoom(
+                name: name,
+                members: members,
+                messages: messages,
+                preview: preview,
+                lastActivity: lastAt,
+                imageDataURL: obj["image"]?.stringValue
+            ))
+        }
+        return rooms
+    }
+
+    private static func message(fromGroupLog entry: JSONValue) -> ChatMessage? {
+        let text = entry["text"]?.stringValue ?? entry["content"]?.stringValue ?? ""
+        guard !text.isEmpty else { return nil }
+        let from = entry["from"]
+        let kind = from?["kind"]?.stringValue ?? entry["kind"]?.stringValue ?? ""
+        let name = from?["name"]?.stringValue ?? entry["name"]?.stringValue ?? ""
+        let isUser = kind == "user" || name.lowercased() == "you" || name.lowercased() == "você"
+        let speaker: ChatSpeaker = isUser
+            ? .user
+            : ChatSpeaker(key: name.lowercased(), displayName: ChatSpeaker.prettyName(name.isEmpty ? "Bot" : name))
+        return ChatMessage(role: isUser ? .user : .assistant, text: text, speaker: speaker)
+    }
+
+    private func loadProfiles() async {
+        guard let ws else { return }
+        var result: JSONValue?
+        for method in ["profiles.list", "profile.list"] {
+            if let value = try? await ws.call(method: method, params: ["include_sessions": .bool(true)]) {
+                result = value
+                break
+            }
+        }
+        if result == nil {
+            for method in ["profiles.list", "profile.list"] {
+                if let value = try? await ws.call(method: method, params: [:]) {
+                    result = value
+                    break
+                }
+            }
+        }
+        guard let result else { return }
+        let rows = result["profiles"]?.arrayValue
+            ?? result["items"]?.arrayValue
+            ?? result.arrayValue
+            ?? []
+        var map: [String: AgentProfileInfo] = [:]
+        for row in rows {
+            guard let name = row["name"]?.stringValue ?? row["id"]?.stringValue, !name.isEmpty else { continue }
+            let display = row["display_name"]?.stringValue
+                ?? row["title"]?.stringValue
+                ?? ChatSpeaker.prettyName(name)
+            let meta = row["ui_meta"] ?? row["meta"]
+            let last = row["last_session"]
+            let canonical = row["canonical_session"]
+            let botsMeta = meta?["hermes-bots"] ?? meta?["hermes-bots"]
+            let info = AgentProfileInfo(
+                name: name.lowercased(),
+                displayName: botsMeta?["title"]?.stringValue ?? display,
+                summary: row["description"]?.stringValue ?? row["summary"]?.stringValue,
+                hasAvatar: row["has_avatar"]?.boolValue == true
+                    || meta?["avatar"] != nil
+                    || meta?["avatar_url"] != nil,
+                accentHex: meta?["accent"]?.stringValue ?? meta?["color"]?.stringValue,
+                isDefault: row["is_default"]?.boolValue == true,
+                lastSessionID: last?["id"]?.stringValue ?? last?["resolved_id"]?.stringValue,
+                canonicalSessionID: canonical?["resolved_id"]?.stringValue ?? canonical?["id"]?.stringValue,
+                lastPreview: last?["preview"]?.stringValue ?? canonical?["preview"]?.stringValue
+            )
+            map[info.name] = info
+            if let dataURL = meta?["avatar"]?.stringValue ?? meta?["avatar_data"]?.stringValue,
+               let data = Self.data(fromDataURL: dataURL) {
+                avatarDataByProfile[info.name] = data
+            }
+        }
+        profilesByName = map
+        groupRooms = parseGroupRooms(from: rows)
+        if pinnedIDs.isEmpty {
+            for room in groupRooms where room.name.lowercased().contains("vegapunk") {
+                togglePin(room.id)
+            }
+        }
+        for profile in map.values where profile.hasAvatar && avatarDataByProfile[profile.name] == nil {
+            await fetchAvatar(for: profile.name)
+        }
+    }
+
+    private func fetchAvatar(for profileName: String) async {
+        guard let ws else { return }
+        for method in ["profiles.get_asset", "profile.get_asset"] {
+            guard let result = try? await ws.call(
+                method: method,
+                params: ["name": .string(profileName), "asset": .string("avatar")]
+            ) else { continue }
+            if result["found"]?.boolValue == false { return }
+            if let url = result["data"]?.stringValue ?? result["data_url"]?.stringValue,
+               let data = Self.data(fromDataURL: url) {
+                avatarDataByProfile[profileName] = data
+                return
+            }
+        }
+    }
+
+    private static func data(fromDataURL string: String) -> Data? {
+        if let range = string.range(of: "base64,") {
+            return Data(base64Encoded: String(string[range.upperBound...]))
+        }
+        return Data(base64Encoded: string)
+    }
+
+    private func rememberSessionLinks(_ event: HermesEvent) {
+        let payload = event.payload
+        let parent = payload["parent_session_id"]?.stringValue
+            ?? payload["parent_id"]?.stringValue
+        let child = payload["child_session_id"]?.stringValue
+            ?? payload["subagent_session_id"]?.stringValue
+        if let parent, chatIndex(for: parent) != nil {
+            if !event.sessionID.isEmpty {
+                childSessionParents[event.sessionID] = parent
+            }
+            if let child {
+                childSessionParents[child] = parent
+            }
+        } else if let child, !event.sessionID.isEmpty {
+            childSessionParents[child] = event.sessionID
+        }
+    }
+
+    private func resolveTargetSession(_ event: HermesEvent) -> String {
+        let sid = event.sessionID
+        if let parent = event.payload["parent_session_id"]?.stringValue ?? event.payload["parent_id"]?.stringValue,
+           chatIndex(for: parent) != nil {
+            return parent
+        }
+        if chatIndex(for: sid) != nil { return sid }
+        if let parent = childSessionParents[sid] { return parent }
+        if shouldJoinActiveThread(event, sessionID: sid), let active = activeChatID {
+            if !sid.isEmpty { childSessionParents[sid] = active }
+            return active
+        }
+        return sid
+    }
+
+    private func shouldJoinActiveThread(_ event: HermesEvent, sessionID: String) -> Bool {
+        if event.type.hasPrefix("subagent.")
+            || event.type.hasPrefix("subagent.")
+            || event.type.hasPrefix("background.")
+            || event.type.hasPrefix("delegation.")
+            || event.type.hasPrefix("delegate.") {
+            return true
+        }
+        if event.payload["parent_session_id"] != nil
+            || event.payload["child_session_id"] != nil
+            || event.payload["subagent_id"] != nil {
+            return true
+        }
+        if let key = ChatSpeaker.profileKey(fromSessionID: sessionID),
+           key != "hermes",
+           profilesByName[key] != nil {
+            return true
+        }
+        return false
     }
 }

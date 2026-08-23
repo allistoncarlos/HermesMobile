@@ -155,13 +155,22 @@ final class HermesWebSocket: @unchecked Sendable {
             return
         }
 
-        // Evento de streaming.
-        if object["method"]?.stringValue == "event",
-           let params = object["params"]?.objectValue {
-            let type = params["type"]?.stringValue ?? ""
-            let sessionID = params["session_id"]?.stringValue ?? ""
-            let payload = params["payload"] ?? .null
-            onEvent?(HermesEvent(type: type, sessionID: sessionID, payload: payload))
+        // Evento de streaming (dashboard: method=event; TUI: method=message.delta / subagent.start / …).
+        if let method = object["method"]?.stringValue {
+            let params = object["params"]?.objectValue ?? [:]
+            if method == "event" {
+                let type = params["type"]?.stringValue ?? ""
+                let sessionID = params["session_id"]?.stringValue ?? ""
+                var payload = params["payload"] ?? .null
+                payload = Self.mergingIdentity(from: params, into: payload)
+                onEvent?(HermesEvent(type: type, sessionID: sessionID, payload: payload))
+            } else if method != "response" {
+                let sessionID = params["session_id"]?.stringValue
+                    ?? object["session_id"]?.stringValue
+                    ?? ""
+                let payload: JSONValue = params.isEmpty ? (object["payload"] ?? .object(object)) : .object(params)
+                onEvent?(HermesEvent(type: method, sessionID: sessionID, payload: payload))
+            }
         }
     }
 
@@ -262,5 +271,23 @@ final class HermesWebSocket: @unchecked Sendable {
 
     deinit {
         task?.cancel(with: .goingAway, reason: nil)
+    }
+
+    /// Copia identidade (perfil/bot) de `params` para o payload, quando o gateway
+    /// manda esses campos no envelope e não dentro de `payload`.
+    private static func mergingIdentity(from params: [String: JSONValue], into payload: JSONValue) -> JSONValue {
+        var obj = payload.objectValue ?? [:]
+        let keys = [
+            "profile", "profile_name", "profile_id",
+            "agent", "agent_name", "speaker", "speaker_name",
+            "bot", "bot_name", "display_name", "parent_session_id",
+            "child_session_id", "subagent_id", "goal",
+        ]
+        for key in keys {
+            if obj[key] == nil, let value = params[key] {
+                obj[key] = value
+            }
+        }
+        return obj.isEmpty && payload.objectValue == nil ? payload : .object(obj)
     }
 }
