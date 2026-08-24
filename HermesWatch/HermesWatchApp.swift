@@ -14,11 +14,13 @@ struct HermesWatchApp: App {
             WatchVoiceView(voice: voice)
                 .onAppear {
                     CompanionSync.shared.bind()
+                    HermesLaunchActions.shared.restorePendingVoiceIfNeeded()
                     Task { await fulfillSiriVoiceLaunchIfNeeded() }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
                         CompanionSync.shared.bind()
+                        HermesLaunchActions.shared.restorePendingVoiceIfNeeded()
                         Task { await fulfillSiriVoiceLaunchIfNeeded() }
                     }
                     // Braço abaixado → inactive/background: só reforça áudio,
@@ -44,13 +46,17 @@ struct HermesWatchApp: App {
         }
     }
 
-    /// Siri no Watch: pede sessão nova no iPhone e liga o microfone.
+    /// Complication / Siri no Watch: pede sessão nova no iPhone (perfil) e liga o microfone.
     @MainActor
     private func fulfillSiriVoiceLaunchIfNeeded() async {
         guard HermesLaunchActions.shared.wantsVoiceSession else { return }
         guard case .connected = CompanionSync.shared.phoneConnection else { return }
-        HermesLaunchActions.shared.clearVoiceRequest()
-        CompanionSync.shared.sendCommand(["cmd": "newSession"], expectReply: true)
+        let profile = HermesLaunchActions.shared.consumeVoiceRequest()
+        var command: [String: Any] = ["cmd": "newSession"]
+        if let profile, !profile.isEmpty {
+            command["profile"] = profile
+        }
+        CompanionSync.shared.sendCommand(command, expectReply: true)
         // Pequeno atraso para o iPhone criar a sessão antes do primeiro turno.
         try? await Task.sleep(nanoseconds: 400_000_000)
         await voice.startSession()

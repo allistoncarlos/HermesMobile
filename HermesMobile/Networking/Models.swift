@@ -212,6 +212,24 @@ struct AgentProfileInfo: Equatable, Identifiable, Sendable {
     var lastPreview: String? = nil
     /// Pin vindo do desktop (`ui_meta['hermes-bots'].pinned`).
     var isPinnedOnServer: Bool = false
+    var lastActivity: Date? = nil
+
+    static func prettyName(_ raw: String) -> String {
+        ChatSpeaker.prettyName(raw)
+    }
+
+    static func initials(from displayName: String) -> String {
+        let parts = displayName.split { $0.isWhitespace || $0 == "-" || $0 == "_" }
+        if parts.count >= 2, let a = parts[0].first, let b = parts[1].first {
+            return String([a, b]).uppercased()
+        }
+        return String(displayName.prefix(2)).uppercased()
+    }
+
+    static func isDefaultProfileName(_ raw: String?) -> Bool {
+        let name = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return name.isEmpty || name == "default" || name == "hermes"
+    }
 }
 
 /// Avatar em memória para um perfil.
@@ -461,6 +479,17 @@ struct OpenChat: Identifiable, Equatable {
         self.subtitle = subtitle
         self.lastActivity = lastActivity
         self.backingSessionID = backingSessionID
+    }
+
+    /// Perfil do bot quando o chat é `bot::nome`; nil no perfil default.
+    var profileName: String? {
+        if kind == .bot, id.hasPrefix("bot::") {
+            return String(id.dropFirst(5))
+        }
+        if kind == .bot {
+            return title.lowercased()
+        }
+        return nil
     }
 }
 

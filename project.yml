@@ -93,3 +93,53 @@ targets:
         SKIP_INSTALL: YES
         INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.hermesmobile.app
         INFOPLIST_KEY_WKApplication: YES
+        CODE_SIGN_ENTITLEMENTS: HermesWatch/HermesWatch.entitlements
+    entitlements:
+      path: HermesWatch/HermesWatch.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.hermesmobile.app.watchkitapp
+    dependencies:
+      - target: HermesWatchWidgets
+        embed: true
+        codeSign: true
+      - sdk: WidgetKit.framework
+  HermesWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: HermesWatchWidgets
+      - path: HermesMobile/Companion/WatchComplicationRoster.swift
+      - path: HermesMobile/Intents
+    info:
+      path: HermesWatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Hermes
+        CFBundleShortVersionString: "1.0.1"
+        CFBundleVersion: "3"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: HermesWatchWidgets/HermesWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.hermesmobile.app.watchkitapp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hermesmobile.app.watchkitapp.widgets
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: WIDGET_EXTENSION
+        CODE_SIGN_ENTITLEMENTS: HermesWatchWidgets/HermesWatchWidgets.entitlements
+        INFOPLIST_FILE: HermesWatchWidgets/Info.plist
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+      configs:
+        debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG WIDGET_EXTENSION"
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework
+      - sdk: AppIntents.framework
+      - sdk: UIKit.framework

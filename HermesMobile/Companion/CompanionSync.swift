@@ -80,6 +80,7 @@ final class CompanionSync: NSObject, ObservableObject {
     static let shared = CompanionSync()
 
     private static let contextKey = "hermes.config"
+    private static let rosterKey = "hermes.roster"
 
     #if os(iOS)
     weak var viewModel: HermesViewModel?
@@ -88,7 +89,9 @@ final class CompanionSync: NSObject, ObservableObject {
 
     #if os(iOS)
     private var lastPushed: CompanionConfigSnapshot?
+    private var lastPushedRosterJSON: String?
     private var pendingSnapshot: CompanionConfigSnapshot?
+    private var pendingRosterJSON: String?
     private var watchTurnID: String?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     #endif
@@ -149,6 +152,9 @@ final class CompanionSync: NSObject, ObservableObject {
             approvalSessionID: approval?.sessionID,
             approvalRequestID: approval?.requestID
         )
+        if !vm.profilesByName.isEmpty {
+            pendingRosterJSON = WatchComplicationStore.encodeJSONString(vm.complicationRoster())
+        }
         flush()
     }
 
@@ -173,11 +179,16 @@ final class CompanionSync: NSObject, ObservableObject {
         guard let snapshot = pendingSnapshot else { return }
         let session = WCSession.default
         guard session.activationState == .activated else { return }
-        guard snapshot != lastPushed else { return }
+        let rosterJSON = pendingRosterJSON
+        guard snapshot != lastPushed || rosterJSON != lastPushedRosterJSON else { return }
         lastPushed = snapshot
+        lastPushedRosterJSON = rosterJSON
         guard let data = try? JSONEncoder().encode(snapshot),
               let json = String(data: data, encoding: .utf8) else { return }
-        let payload: [String: Any] = [Self.contextKey: json]
+        var payload: [String: Any] = [Self.contextKey: json]
+        if let rosterJSON {
+            payload[Self.rosterKey] = rosterJSON
+        }
         try? session.updateApplicationContext(payload)
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil) { _ in }
@@ -296,6 +307,10 @@ final class CompanionSync: NSObject, ObservableObject {
     }
 
     private func applyContext(_ context: [String: Any]) {
+        if let rosterJSON = context[Self.rosterKey] as? String,
+           let roster = WatchComplicationStore.decodeJSONString(rosterJSON) {
+            WatchComplicationStore.save(roster)
+        }
         guard let json = context[Self.contextKey] as? String,
               let data = json.data(using: .utf8),
               let snapshot = try? JSONDecoder().decode(CompanionConfigSnapshot.self, from: data)
@@ -317,9 +332,9 @@ final class CompanionSync: NSObject, ObservableObject {
     }
 
     private func handleWatchMessage(_ message: [String: Any]) {
-        if message[Self.contextKey] != nil {
+        if message[Self.contextKey] != nil || message[Self.rosterKey] != nil {
             applyContext(message)
-            return
+            if message["kind"] == nil { return }
         }
         let kind = message["kind"] as? String
         let turn = message["turn"] as? String
@@ -521,7 +536,8 @@ extension CompanionSync {
                 await vm.connect()
             }
             if vm.connectionState == .connected {
-                await vm.newSession()
+                let profile = message["profile"] as? String
+                await vm.newSession(profile: profile)
             }
             return statusReply(ok: vm.connectionState == .connected)
 

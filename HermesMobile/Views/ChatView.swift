@@ -506,13 +506,13 @@ struct ChatView: View {
         }
     }
 
-    /// Siri / App Shortcut: nova sessão + modo voz.
+    /// Siri / complication / App Shortcut: nova sessão no perfil + modo voz.
     private func fulfillSiriVoiceLaunchIfNeeded() async {
         guard HermesLaunchActions.shared.wantsVoiceSession else { return }
         guard case .connected = vm.connectionState else { return }
-        HermesLaunchActions.shared.clearVoiceRequest()
+        let profile = HermesLaunchActions.shared.consumeVoiceRequest()
         inputFocused = false
-        await vm.newSession()
+        await vm.newSession(profile: profile)
         voice.attach(vm)
         voice.present()
     }

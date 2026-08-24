@@ -16,15 +16,62 @@ struct StartHermesVoiceIntent: AppIntent {
     /// Traz o app à frente (iPhone ou Watch, conforme onde a Siri rodou).
     static var openAppWhenRun: Bool = true
 
+    @Parameter(title: "Perfil")
+    var profileName: String?
+
+    init() {
+        self.profileName = nil
+    }
+
+    init(profileName: String?) {
+        self.profileName = profileName
+    }
+
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        HermesLaunchActions.shared.requestStartVoice()
+        HermesLaunchActions.shared.requestStartVoice(profile: profileName)
         return .result(dialog: "Abrindo o Hermes em modo de voz.")
     }
 }
 
 /// Marca o intent como gravação de áudio (indicador + prioridade em background).
+#if !WIDGET_EXTENSION
 extension StartHermesVoiceIntent: AudioRecordingIntent {}
+#endif
+
+/// Toque num slot da complication: abre o Watch já em fala ativa naquele perfil.
+struct OpenHermesVoiceProfileIntent: AppIntent {
+    static var title: LocalizedStringResource = "Falar com um perfil do Hermes"
+    static var description = IntentDescription(
+        "Abre o Hermes no Apple Watch com a fala ativa no perfil escolhido."
+    )
+    static var openAppWhenRun: Bool = true
+
+    @Parameter(title: "Perfil")
+    var profileName: String
+
+    init() {
+        self.profileName = "default"
+    }
+
+    init(profileName: String) {
+        self.profileName = profileName
+    }
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Falar com \(\.$profileName)")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        HermesLaunchActions.shared.requestStartVoice(profile: profileName)
+        return .result()
+    }
+}
+
+#if os(watchOS) && !WIDGET_EXTENSION
+extension OpenHermesVoiceProfileIntent: AudioRecordingIntent {}
+#endif
 
 struct StopHermesVoiceIntent: AppIntent {
     static var title: LocalizedStringResource = "Parar o Hermes"
@@ -40,6 +87,7 @@ struct StopHermesVoiceIntent: AppIntent {
     }
 }
 
+#if !WIDGET_EXTENSION
 struct HermesShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor = .blue
 
@@ -76,3 +124,4 @@ struct HermesShortcuts: AppShortcutsProvider {
         )
     }
 }
+#endif

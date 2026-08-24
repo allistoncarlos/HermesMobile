@@ -507,9 +507,41 @@ final class HermesViewModel: ObservableObject {
         }
     }
 
-    func newSession() async {
-        // Já existe conversa em branco → só ativa ela (não empilha várias "Nova conversa").
-        if let blank = openChats.first(where: { Self.isBlankChat($0) }) {
+    func newSession(profile: String? = nil) async {
+        let requested = Self.normalizedProfileName(profile)
+        rememberRecentBot(requested)
+        syncCompanion()
+
+        if let requested, !AgentProfileInfo.isDefaultProfileName(requested) {
+            if let info = profilesByName[requested] {
+                await openBotProfile(info)
+                return
+            }
+            pruneBlankOpenChats(keeping: nil)
+            var chat = OpenChat(
+                id: pinKey(forBot: requested),
+                title: AgentProfileInfo.prettyName(requested),
+                kind: .bot
+            )
+            do {
+                chat = try await ensureBackingSession(chat)
+            } catch {
+                statusMessage = error.localizedDescription
+                return
+            }
+            if let i = openChats.firstIndex(where: { $0.id == chat.id }) {
+                openChats[i] = chat
+            } else {
+                openChats.append(chat)
+            }
+            await selectChat(chat.id)
+            return
+        }
+
+        // Já existe conversa em branco no perfil default → só ativa ela.
+        if let blank = openChats.first(where: {
+            Self.isBlankChat($0) && $0.kind == .direct
+        }) {
             await selectChat(blank.id)
             return
         }
@@ -519,7 +551,6 @@ final class HermesViewModel: ObservableObject {
             let result = try await ws.call(method: "session.create", params: ["cols": .number(80)])
             if let sid = result["session_id"]?.stringValue {
                 let stored = result["stored_session_id"]?.stringValue ?? sid
-                // Remove outras abertas em branco antes de adicionar.
                 pruneBlankOpenChats(keeping: nil)
                 let chat = OpenChat(id: sid, storedSessionID: stored, title: "Nova conversa")
                 openChats.append(chat)
@@ -528,6 +559,7 @@ final class HermesViewModel: ObservableObject {
                 #if os(iOS)
                 syncNotifierContext()
                 #endif
+                syncCompanion()
             }
         } catch {
             statusMessage = error.localizedDescription
@@ -1585,6 +1617,8 @@ final class HermesViewModel: ObservableObject {
     }
 
     func openBotProfile(_ profile: AgentProfileInfo) async {
+        rememberRecentBot(profile.name)
+        syncCompanion()
         let key = pinKey(forBot: profile.name)
         if let existing = openChats.first(where: { $0.id == key || $0.kind == .bot && $0.title == profile.displayName }) {
             await selectChat(existing.id)
@@ -1612,6 +1646,7 @@ final class HermesViewModel: ObservableObject {
             openChats.append(chat)
         }
         await selectChat(chat.id)
+        syncCompanion()
     }
 
     private func ensureBackingSession(_ chat: OpenChat) async throws -> OpenChat {
@@ -1772,11 +1807,17 @@ final class HermesViewModel: ObservableObject {
                     || meta?["avatar"] != nil
                     || meta?["avatar_url"] != nil,
                 accentHex: meta?["accent"]?.stringValue ?? meta?["color"]?.stringValue,
-                isDefault: row["is_default"]?.boolValue == true,
+                isDefault: row["is_default"]?.boolValue == true
+                    || AgentProfileInfo.isDefaultProfileName(name),
                 lastSessionID: last?["id"]?.stringValue ?? last?["resolved_id"]?.stringValue,
                 canonicalSessionID: canonical?["resolved_id"]?.stringValue ?? canonical?["id"]?.stringValue,
                 lastPreview: last?["preview"]?.stringValue ?? canonical?["preview"]?.stringValue,
-                isPinnedOnServer: botsMeta?["pinned"]?.boolValue == true
+                isPinnedOnServer: botsMeta?["pinned"]?.boolValue == true,
+                lastActivity: Self.parseDate(last?["updated_at"])
+                    ?? Self.parseDate(last?["started_at"])
+                    ?? Self.parseDate(last?["created_at"])
+                    ?? Self.parseDate(row["updated_at"])
+                    ?? Self.parseDate(row["last_used"])
             )
             map[info.name] = info
             if let dataURL = meta?["avatar"]?.stringValue ?? meta?["avatar_data"]?.stringValue,
@@ -1786,8 +1827,13 @@ final class HermesViewModel: ObservableObject {
         }
         profilesByName = map
         groupRooms = parseGroupRooms(from: rows)
+        seedRecentBotsIfNeeded()
+        syncCompanion()
         for profile in map.values where profile.hasAvatar && avatarDataByProfile[profile.name] == nil {
             await fetchAvatar(for: profile.name)
+        }
+        if !map.isEmpty {
+            syncCompanion()
         }
     }
 
