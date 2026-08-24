@@ -1,0 +1,73 @@
+{
+  "source" : "\/Users\/alliston\/Developer\/iOS\/HermesMobile\/HermesMobile\/Intents\/StartHermesVoiceIntent.swift",
+  "version" : 2,
+  "tables" : {
+    "AppShortcuts" : [
+      {
+        "key" : "${applicationName}",
+        "values" : [
+          "${applicationName}",
+          "Falar com ${applicationName}",
+          "Abrir ${applicationName}",
+          "Ouvir ${applicationName}",
+          "Modo voz do ${applicationName}",
+          "Conversar com ${applicationName}",
+          "Falar com o ${applicationName}",
+          "Abrir o ${applicationName}",
+          "Ouvir o ${applicationName}",
+          "Handsfree do ${applicationName}",
+          "Escutar o ${applicationName}"
+        ],
+        "appShortcutMetadata" : [
+          {
+            "index" : 0,
+            "parameterDisplayRepresentations" : {
+
+            },
+            "title" : "Falar com o Hermes",
+            "actionIdentifier" : "StartHermesVoiceIntent",
+            "parameterTypes" : {
+
+            }
+          }
+        ],
+        "location" : {
+          "startingLine" : 94,
+          "startingColumn" : 0
+        }
+      },
+      {
+        "key" : "Parar ${applicationName}",
+        "values" : [
+          "Parar ${applicationName}",
+          "Parar o ${applicationName}",
+          "Encerrar ${applicationName}",
+          "Encerrar o ${applicationName}",
+          "Sair do ${applicationName}"
+        ],
+        "appShortcutMetadata" : [
+          {
+            "index" : 1,
+            "parameterDisplayRepresentations" : {
+
+            },
+            "title" : "Parar o Hermes",
+            "actionIdentifier" : "StopHermesVoiceIntent",
+            "parameterTypes" : {
+
+            }
+          }
+        ],
+        "location" : {
+          "startingLine" : 94,
+          "startingColumn" : 0
+        }
+      }
+    ],
+    "Localizable" : [
+      {
+        "key" : "Falar com ${profileName}"
+      }
+    ]
+  }
+}

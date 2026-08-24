@@ -72,7 +72,9 @@ struct WatchVoiceView: View {
 
 
     private var sessionContent: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
+            botTabs
+
             Text(voice.statusLabel)
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.white.opacity(0.7))
@@ -111,6 +113,39 @@ struct WatchVoiceView: View {
             }
         }
         .padding(.horizontal, 6)
+    }
+
+    private var botTabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 5) {
+                ForEach(companion.roster.slots) { slot in
+                    let selected = companion.activeProfileName == slot.profileName
+                    let accent = Color.hermesAccent(hex: slot.accentHex, fallbackKey: slot.profileName)
+                    Button {
+                        if isInSession { voice.endSession() }
+                        CompanionSync.shared.selectBot(slot)
+                    } label: {
+                        Text(slot.isDefault ? String(slot.displayName.prefix(1)) : slot.initials)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(accent.opacity(selected ? 0.95 : 0.32))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(accent, lineWidth: selected ? 1.4 : 0)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(slot.displayName)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
+        .frame(height: 26)
     }
 
     private var orb: some View {
@@ -173,7 +208,7 @@ struct WatchVoiceView: View {
             .disabled(!isInSession)
 
             Button {
-                CompanionSync.shared.sendCommand(["cmd": "newSession"], expectReply: true)
+                CompanionSync.shared.startVoiceOnSelectedBot()
             } label: {
                 Image(systemName: "plus.bubble")
                     .font(.system(size: 14, weight: .medium))
@@ -234,7 +269,11 @@ struct WatchVoiceView: View {
     private func handlePrimary() {
         switch voice.phase {
         case .idle:
-            Task { await voice.startSession() }
+            Task {
+                CompanionSync.shared.startVoiceOnSelectedBot()
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                await voice.startSession()
+            }
         default:
             voice.primaryAction()
         }
@@ -276,26 +315,37 @@ struct WatchVoiceView: View {
     private var displayText: String {
         switch voice.phase {
         case .listening, .idle:
-            return isInSession ? "Fale com o Hermes" : "Toque para falar"
+            return isInSession ? "Fale com \(selectedBotName)" : "Toque para falar"
         case .transcribing:
             return voice.liveTranscript.isEmpty ? "…" : voice.liveTranscript
         case .processing, .speaking:
             return voice.assistantCaption.isEmpty
-                ? (voice.liveTranscript.isEmpty ? "Hermes…" : voice.liveTranscript)
+                ? (voice.liveTranscript.isEmpty ? "\(selectedBotName)…" : voice.liveTranscript)
                 : voice.assistantCaption
         case .error(let message):
             return message
         }
     }
 
+    private var selectedBotName: String {
+        companion.roster.slots.first(where: { $0.profileName == companion.activeProfileName })?.displayName
+            ?? companion.roster.defaultSlot.displayName
+    }
+
+    private var selectedBotAccent: Color {
+        let slot = companion.roster.slots.first(where: { $0.profileName == companion.activeProfileName })
+            ?? companion.roster.defaultSlot
+        return Color.hermesAccent(hex: slot.accentHex, fallbackKey: slot.profileName)
+    }
+
     private var orbTint: Color {
         switch voice.phase {
-        case .listening: return Color(red: 0.35, green: 0.72, blue: 0.98)
-        case .transcribing: return Color(red: 0.55, green: 0.70, blue: 0.98)
+        case .listening: return selectedBotAccent
+        case .transcribing: return selectedBotAccent.opacity(0.85)
         case .processing: return Color(red: 0.72, green: 0.55, blue: 0.98)
         case .speaking: return Color(red: 0.40, green: 0.85, blue: 0.70)
         case .error: return Color(red: 0.95, green: 0.40, blue: 0.40)
-        case .idle: return Color(red: 0.55, green: 0.60, blue: 0.70)
+        case .idle: return selectedBotAccent.opacity(0.75)
         }
     }
 
@@ -328,7 +378,7 @@ struct WatchVoiceView: View {
     private var primaryButtonFill: Color {
         switch voice.phase {
         case .speaking, .processing, .transcribing: return Color.red.opacity(0.85)
-        default: return Color(red: 0.35, green: 0.72, blue: 0.98)
+        default: return selectedBotAccent
         }
     }
 }

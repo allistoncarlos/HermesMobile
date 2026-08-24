@@ -109,7 +109,7 @@ struct ComplicationAvatarView: View {
                 }
             } else {
                 ZStack {
-                    Color.white.opacity(0.22)
+                    Color.hermesAccent(hex: slot.accentHex, fallbackKey: slot.profileName)
                     Text(slot.initials)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)

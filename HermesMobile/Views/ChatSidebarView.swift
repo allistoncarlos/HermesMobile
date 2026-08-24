@@ -25,11 +25,19 @@ struct ChatSidebarView: View {
         vm.openChats.filter { !HermesViewModel.isBlankChat($0) }
     }
 
-    /// Histórico sem duplicar as que já estão em Abertas.
+    /// Histórico sem duplicar as que já estão em Abertas, opcionalmente só de um bot.
     private var historySessions: [SessionSummary] {
         let openStored = Set(vm.openChats.compactMap(\.storedSessionID))
         let openIDs = Set(vm.openChats.map(\.id))
-        return vm.sessions.filter { !openStored.contains($0.id) && !openIDs.contains($0.id) }
+        let all = vm.sessions.filter { !openStored.contains($0.id) && !openIDs.contains($0.id) }
+        guard let filter = vm.selectedBotFilter else { return all }
+        return all.filter { session in
+            let key = vm.botKey(for: session)
+            if AgentProfileInfo.isDefaultProfileName(filter) {
+                return key == "default" || AgentProfileInfo.isDefaultProfileName(key)
+            }
+            return key == filter
+        }
     }
 
     private var pinnedItems: [DrawerPinItem] {
@@ -55,8 +63,31 @@ struct ChatSidebarView: View {
         vm.groupRooms.filter { !vm.isPinned($0.id) }
     }
 
-    private var unpinnedDrawerBots: [AgentProfileInfo] {
-        vm.drawerBots.filter { !vm.isPinned(vm.pinKey(forBot: $0.name)) }
+    private struct HistoryGroup: Identifiable {
+        let id: String
+        let title: String
+        let bot: AgentProfileInfo?
+        let sessions: [SessionSummary]
+    }
+
+    private var historyGroups: [HistoryGroup] {
+        var buckets: [String: [SessionSummary]] = [:]
+        var order: [String] = []
+        for session in historySessions {
+            let key = vm.botKey(for: session)
+            if buckets[key] == nil { order.append(key) }
+            buckets[key, default: []].append(session)
+        }
+        return order.map { key in
+            HistoryGroup(
+                id: key,
+                title: vm.displayName(forBotKey: key),
+                bot: vm.profilesByName[key] ?? vm.profilesByName.values.first(where: {
+                    AgentProfileInfo.isDefaultProfileName(key) && $0.isDefault
+                }),
+                sessions: buckets[key] ?? []
+            )
+        }
     }
 
     private func pinButton(_ id: String) -> some View {
@@ -106,23 +137,106 @@ struct ChatSidebarView: View {
         .listRowBackground(vm.activeChatID == room.id ? HermesTheme.rowHover : Color.clear)
     }
 
-    private func botRow(_ bot: AgentProfileInfo) -> some View {
+    private var botsStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Bots")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if vm.selectedBotFilter != nil {
+                    Button("Todos") {
+                        vm.selectedBotFilter = nil
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(vm.drawerBots) { bot in
+                        botAvatarButton(bot)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private func isBotActive(_ bot: AgentProfileInfo) -> Bool {
+        let filter = vm.filterKey(for: bot)
+        if vm.selectedBotFilter == filter { return true }
         let key = vm.pinKey(forBot: bot.name)
+        if vm.activeChatID == key { return true }
+        guard let chat = vm.openChats.first(where: { $0.id == vm.activeChatID }) else { return false }
+        if chat.kind == .bot {
+            return chat.id == key || chat.title.caseInsensitiveCompare(bot.displayName) == .orderedSame
+        }
+        if bot.isDefault || AgentProfileInfo.isDefaultProfileName(bot.name) {
+            return chat.kind == .direct && vm.selectedBotFilter == nil
+        }
+        return false
+    }
+
+    private func botAvatarButton(_ bot: AgentProfileInfo) -> some View {
+        let active = isBotActive(bot)
+        let accent = Color.hermesAccent(hex: bot.accentHex, fallbackKey: bot.name)
         return Button {
             Task { await vm.openBotProfile(bot) }
         } label: {
-            conversationRow(
-                title: bot.displayName,
-                subtitle: bot.lastPreview ?? bot.summary ?? "Bot",
-                systemImage: "cpu",
-                isActive: vm.activeChatID == key,
-                avatarKey: bot.name,
-                showPin: vm.isPinned(key)
-            )
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(accent, lineWidth: active ? 2.5 : 1.5)
+                        .frame(width: 56, height: 56)
+                    botAvatarImage(bot, size: 48)
+                }
+                Text(bot.displayName)
+                    .font(.caption2.weight(active ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .frame(width: 64)
+            }
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .swipeActions(edge: .leading) { pinButton(key) }
-        .listRowBackground(vm.activeChatID == key ? HermesTheme.rowHover : Color.clear)
+        .buttonStyle(.borderless)
+        .contextMenu {
+            pinButton(vm.pinKey(forBot: bot.name))
+        }
+        .accessibilityLabel("Abrir chat com \(bot.displayName)")
+    }
+
+    private func botAvatarImage(_ bot: AgentProfileInfo, size: CGFloat) -> some View {
+        Group {
+            if let data = vm.avatarData(for: bot.name), let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Circle().fill(Color.hermesAccent(hex: bot.accentHex, fallbackKey: bot.name))
+                    Text(AgentProfileInfo.initials(from: bot.displayName))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private func historyHeader(_ group: HistoryGroup) -> some View {
+        HStack(spacing: 8) {
+            if let bot = group.bot {
+                botAvatarImage(bot, size: 18)
+            } else {
+                Image(systemName: "clock")
+                    .font(.caption2)
+            }
+            Text(group.title)
+            Text("\(group.sessions.count)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func conversationRow(
@@ -179,6 +293,11 @@ struct ChatSidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if !vm.drawerBots.isEmpty {
+                botsStrip
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+            }
             List {
                 Section {
                     newChatButton
@@ -199,14 +318,6 @@ struct ChatSidebarView: View {
                     Section("Chats em grupo") {
                         ForEach(unpinnedGroupRooms) { room in
                             groupRow(room)
-                        }
-                    }
-                }
-
-                if !unpinnedDrawerBots.isEmpty {
-                    Section("Bots") {
-                        ForEach(unpinnedDrawerBots) { bot in
-                            botRow(bot)
                         }
                     }
                 }
@@ -240,36 +351,44 @@ struct ChatSidebarView: View {
                     }
                 }
 
-                Section("Histórico") {
-                    if historySessions.isEmpty {
-                        Text("Nenhuma conversa salva ainda.")
+                if historySessions.isEmpty {
+                    Section("Histórico") {
+                        Text(vm.selectedBotFilter == nil
+                             ? "Nenhuma conversa salva ainda."
+                             : "Nenhuma conversa com \(vm.displayName(forBotKey: vm.selectedBotFilter ?? "")).")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(historySessions) { session in
-                            historyRow(session)
-                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    pinButton(session.id)
-                                }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        pendingDelete = PendingDelete(
-                                            id: session.id,
-                                            title: session.title.isEmpty ? "Conversa" : session.title,
-                                            isOpenChat: false,
-                                            openChat: nil
-                                        )
-                                    } label: {
-                                        Label("Excluir", systemImage: "trash")
+                    }
+                } else {
+                    ForEach(historyGroups) { group in
+                        Section {
+                            ForEach(group.sessions) { session in
+                                historyRow(session)
+                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                        pinButton(session.id)
                                     }
-                                    Button {
-                                        Task { await vm.archiveSession(storedID: session.id) }
-                                    } label: {
-                                        Label("Arquivar", systemImage: "archivebox")
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            pendingDelete = PendingDelete(
+                                                id: session.id,
+                                                title: session.title.isEmpty ? "Conversa" : session.title,
+                                                isOpenChat: false,
+                                                openChat: nil
+                                            )
+                                        } label: {
+                                            Label("Excluir", systemImage: "trash")
+                                        }
+                                        Button {
+                                            Task { await vm.archiveSession(storedID: session.id) }
+                                        } label: {
+                                            Label("Arquivar", systemImage: "archivebox")
+                                        }
+                                        .tint(.orange)
                                     }
-                                    .tint(.orange)
-                                }
+                            }
+                        } header: {
+                            historyHeader(group)
                         }
                     }
                 }
@@ -377,12 +496,18 @@ struct ChatSidebarView: View {
 
     private var newChatButton: some View {
         Button {
-            Task { await vm.newSession() }
+            Task {
+                if let filter = vm.selectedBotFilter, !AgentProfileInfo.isDefaultProfileName(filter) {
+                    await vm.newSession(profile: filter)
+                } else {
+                    await vm.newSession()
+                }
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "square.and.pencil")
                     .font(.body.weight(.medium))
-                Text("Nova conversa")
+                Text(newChatTitle)
                     .font(.body.weight(.medium))
                 Spacer()
             }
@@ -395,6 +520,13 @@ struct ChatSidebarView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private var newChatTitle: String {
+        guard let filter = vm.selectedBotFilter, !AgentProfileInfo.isDefaultProfileName(filter) else {
+            return "Nova conversa"
+        }
+        return "Nova conversa · \(vm.displayName(forBotKey: filter))"
     }
 
     private func openChatRow(_ chat: OpenChat) -> some View {
@@ -438,7 +570,10 @@ struct ChatSidebarView: View {
 
     private func historyRow(_ session: SessionSummary) -> some View {
         Button {
-            Task { await vm.resumeSession(session) }
+            Task {
+                vm.selectedBotFilter = vm.botKey(for: session)
+                await vm.resumeSession(session)
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "clock")

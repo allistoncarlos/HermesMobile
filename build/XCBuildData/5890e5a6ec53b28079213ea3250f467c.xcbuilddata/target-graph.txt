@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'HermesWatch' in project 'HermesMobile'
+➜ Explicit dependency on target 'HermesWatchWidgets' in project 'HermesMobile'
+Target 'HermesWatchWidgets' in project 'HermesMobile' (no dependencies)

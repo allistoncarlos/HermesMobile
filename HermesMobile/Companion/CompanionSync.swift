@@ -102,6 +102,9 @@ final class CompanionSync: NSObject, ObservableObject {
     @Published var phoneReachable = false
     @Published var didReceivePhoneState = false
     @Published var pendingApproval: PendingApproval?
+    @Published var roster: WatchComplicationRoster = WatchComplicationStore.loadOrPlaceholder()
+    /// Bot selecionado nas abas do Watch (`default` na abertura, salvo complication).
+    @Published var activeProfileName: String = "default"
 
     private var turnContinuation: CheckedContinuation<WatchTurnResult, Never>?
     private var turnID: String?
@@ -214,6 +217,26 @@ final class CompanionSync: NSObject, ObservableObject {
         sendCommand(["cmd": "ensureConnected"], expectReply: true)
     }
 
+    func selectBot(_ slot: WatchComplicationSlot) {
+        activeProfileName = slot.profileName
+        var command: [String: Any] = ["cmd": "newSession"]
+        if !slot.isDefault, !AgentProfileInfo.isDefaultProfileName(slot.profileName) {
+            command["profile"] = slot.profileName
+        }
+        sendCommand(command, expectReply: true)
+    }
+
+    func alignToDefaultBotIfNeeded() {
+        let slot = roster.defaultSlot
+        activeProfileName = slot.profileName
+    }
+
+    func startVoiceOnSelectedBot() {
+        let name = activeProfileName
+        let slot = roster.slots.first(where: { $0.profileName == name }) ?? roster.defaultSlot
+        selectBot(slot)
+    }
+
     func sendCommand(_ payload: [String: Any], expectReply: Bool = false) {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
@@ -310,6 +333,10 @@ final class CompanionSync: NSObject, ObservableObject {
         if let rosterJSON = context[Self.rosterKey] as? String,
            let roster = WatchComplicationStore.decodeJSONString(rosterJSON) {
             WatchComplicationStore.save(roster)
+            self.roster = roster
+            if roster.slots.contains(where: { $0.profileName == activeProfileName }) == false {
+                activeProfileName = roster.defaultSlot.profileName
+            }
         }
         guard let json = context[Self.contextKey] as? String,
               let data = json.data(using: .utf8),
