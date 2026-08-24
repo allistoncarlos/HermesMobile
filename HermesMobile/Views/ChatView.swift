@@ -268,12 +268,17 @@ struct ChatView: View {
                     .padding(.horizontal, metrics.horizontalPadding)
             }
 
+            if !mentionSuggestions.isEmpty {
+                mentionPicker
+                    .padding(.horizontal, metrics.horizontalPadding)
+            }
+
             ChatColumn {
                 HStack(alignment: .bottom, spacing: 8) {
                     attachButton
 
                     TextField(
-                        vm.hasPendingClarify ? "Resposta…" : "Pergunte qualquer coisa",
+                        composerPlaceholder,
                         text: $draft,
                         axis: .vertical
                     )
@@ -360,6 +365,130 @@ struct ChatView: View {
                 }
             }
         }
+    }
+
+    private var composerPlaceholder: String {
+        if vm.hasPendingClarify { return "Resposta…" }
+        if vm.isGroupChat { return "Mensagem · use @ para citar um bot" }
+        return "Pergunte qualquer coisa"
+    }
+
+    private var mentionQuery: (start: String.Index, query: String)? {
+        guard vm.isGroupChat else { return nil }
+        let text = draft
+        guard let at = text.lastIndex(of: "@") else { return nil }
+        if at > text.startIndex {
+            let previous = text[text.index(before: at)]
+            if previous.isLetter || previous.isNumber || previous == "_" {
+                return nil
+            }
+        }
+        let afterStart = text.index(after: at)
+        let after = text[afterStart...]
+        if after.contains(where: { $0.isWhitespace || $0 == "\n" }) {
+            return nil
+        }
+        return (at, String(after))
+    }
+
+    private var mentionSuggestions: [MentionSuggestion] {
+        guard let query = mentionQuery else { return [] }
+        let needle = query.query.lowercased()
+        var items: [MentionSuggestion] = []
+        if needle.isEmpty
+            || "all".hasPrefix(needle)
+            || "todos".hasPrefix(needle)
+            || "everyone".hasPrefix(needle) {
+            items.append(MentionSuggestion(handle: "all", title: "Todos", subtitle: "Citar o grupo inteiro"))
+        }
+        for member in vm.mentionableBots {
+            let handle = member.mentionHandle
+            guard !handle.isEmpty else { continue }
+            if needle.isEmpty
+                || handle.hasPrefix(needle)
+                || member.key.hasPrefix(needle)
+                || member.displayName.lowercased().contains(needle) {
+                items.append(
+                    MentionSuggestion(
+                        handle: handle,
+                        title: member.displayName,
+                        subtitle: "@\(handle)",
+                        avatarKey: member.key
+                    )
+                )
+            }
+        }
+        return Array(items.prefix(8))
+    }
+
+    private var mentionPicker: some View {
+        ChatColumn {
+            VStack(spacing: 0) {
+                ForEach(mentionSuggestions) { suggestion in
+                    Button {
+                        insertMention(suggestion.handle)
+                    } label: {
+                        HStack(spacing: 10) {
+                            mentionAvatar(suggestion)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(suggestion.title)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                Text(suggestion.subtitle)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if suggestion.id != mentionSuggestions.last?.id {
+                        Divider().padding(.leading, 46)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(HermesTheme.composerFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(HermesTheme.composerStroke, lineWidth: 1)
+            )
+        }
+    }
+
+    private func mentionAvatar(_ suggestion: MentionSuggestion) -> some View {
+        Group {
+            if let key = suggestion.avatarKey,
+               let data = vm.avatarData(for: key),
+               let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Circle().fill(HermesTheme.rowHover)
+                    Image(systemName: suggestion.handle == "all" ? "person.3.fill" : "cpu")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(width: 28, height: 28)
+        .clipShape(Circle())
+    }
+
+    private func insertMention(_ handle: String) {
+        guard let query = mentionQuery else {
+            draft += "@\(handle) "
+            return
+        }
+        draft.replaceSubrange(query.start..<draft.endIndex, with: "@\(handle) ")
+        inputFocused = true
     }
 
     private var showVoiceButton: Bool {
@@ -555,6 +684,14 @@ struct ChatView: View {
         }
         return resized.jpegData(compressionQuality: quality)
     }
+}
+
+private struct MentionSuggestion: Identifiable {
+    var id: String { handle }
+    let handle: String
+    let title: String
+    let subtitle: String
+    var avatarKey: String?
 }
 
 // ============================================================================

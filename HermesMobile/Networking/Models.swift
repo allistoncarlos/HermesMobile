@@ -210,6 +210,8 @@ struct AgentProfileInfo: Equatable, Identifiable, Sendable {
     var lastSessionID: String? = nil
     var canonicalSessionID: String? = nil
     var lastPreview: String? = nil
+    /// Pin vindo do desktop (`ui_meta['hermes-bots'].pinned`).
+    var isPinnedOnServer: Bool = false
 }
 
 /// Avatar em memória para um perfil.
@@ -368,6 +370,13 @@ struct GroupMember: Equatable, Identifiable, Sendable {
     var id: String { key }
     var key: String
     var displayName: String
+
+    /// Handle usado em @menções (`@atlas`).
+    var mentionHandle: String {
+        let raw = key.lowercased().replacingOccurrences(of: " ", with: "")
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
+        return String(raw.unicodeScalars.filter { allowed.contains($0) })
+    }
 }
 
 /// Chat em grupo (Vegapunk, etc.) espelhado do `ui_meta` do perfil default.
@@ -379,6 +388,8 @@ struct GroupRoom: Equatable, Identifiable, Sendable {
     var preview: String?
     var lastActivity: Date?
     var imageDataURL: String?
+    /// Pin vindo do snapshot do grupo no gateway, se existir.
+    var isPinnedOnServer: Bool = false
 }
 
 struct DrawerPinItem: Identifiable {

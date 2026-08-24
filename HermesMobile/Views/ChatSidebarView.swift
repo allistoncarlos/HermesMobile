@@ -33,7 +33,7 @@ struct ChatSidebarView: View {
     }
 
     private var pinnedItems: [DrawerPinItem] {
-        vm.pinnedIDs.compactMap { id in
+        vm.effectivePinnedIDs.compactMap { id in
             if let room = vm.groupRooms.first(where: { $0.id == id }) {
                 return DrawerPinItem(id: id, title: room.name, subtitle: room.preview ?? "Grupo", kind: .group, room: room, bot: nil, session: nil)
             }
@@ -49,6 +49,14 @@ struct ChatSidebarView: View {
             }
             return nil
         }
+    }
+
+    private var unpinnedGroupRooms: [GroupRoom] {
+        vm.groupRooms.filter { !vm.isPinned($0.id) }
+    }
+
+    private var unpinnedDrawerBots: [AgentProfileInfo] {
+        vm.drawerBots.filter { !vm.isPinned(vm.pinKey(forBot: $0.name)) }
     }
 
     private func pinButton(_ id: String) -> some View {
@@ -187,17 +195,17 @@ struct ChatSidebarView: View {
                     }
                 }
 
-                if !vm.groupRooms.isEmpty {
+                if !unpinnedGroupRooms.isEmpty {
                     Section("Chats em grupo") {
-                        ForEach(vm.groupRooms) { room in
+                        ForEach(unpinnedGroupRooms) { room in
                             groupRow(room)
                         }
                     }
                 }
 
-                if !vm.drawerBots.isEmpty {
+                if !unpinnedDrawerBots.isEmpty {
                     Section("Bots") {
-                        ForEach(vm.drawerBots) { bot in
+                        ForEach(unpinnedDrawerBots) { bot in
                             botRow(bot)
                         }
                     }

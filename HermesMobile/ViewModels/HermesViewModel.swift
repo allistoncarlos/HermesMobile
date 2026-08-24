@@ -27,8 +27,10 @@ final class HermesViewModel: ObservableObject {
     @Published var avatarDataByProfile: [String: Data] = [:]
     /// Chats em grupo sincronizados do desktop (Vegapunk e afins).
     @Published var groupRooms: [GroupRoom] = []
-    /// IDs fixados no drawer (`group::vegapunk`, `bot::atlas`, session id).
+    /// Pins locais do drawer (escolha neste aparelho).
     @Published var pinnedIDs: [String] = []
+    /// Pins do servidor que o usuário desafixou só neste aparelho.
+    @Published var unpinnedIDs: [String] = []
     /// Chamado quando o assistente completa uma mensagem (para TTS em background).
     var onAssistantMessageComplete: ((String) -> Void)?
 
@@ -51,6 +53,8 @@ final class HermesViewModel: ObservableObject {
     /// Evita loop de reconnect automático em queda de WS.
     private var autoReconnectInFlight = false
     private static let pinnedIDsKey = "hermes.drawerPinnedIDs"
+    private static let unpinnedIDsKey = "hermes.drawerUnpinnedIDs"
+    private static let clearedAutoPinKey = "hermes.clearedHardcodedGroupPin"
     #if os(iOS)
     /// Hold de BackgroundRuntime enquanto algum chat está em streaming.
     private var turnBackgroundHeld = false
@@ -78,6 +82,8 @@ final class HermesViewModel: ObservableObject {
             SessionCookieStore.restore()
         }
         pinnedIDs = UserDefaults.standard.stringArray(forKey: Self.pinnedIDsKey) ?? []
+        unpinnedIDs = UserDefaults.standard.stringArray(forKey: Self.unpinnedIDsKey) ?? []
+        Self.clearLegacyHardcodedPins(from: &pinnedIDs)
         if config.hasSavedConfig && config.hasRestorableAuth {
             connectionState = .connecting
         }
@@ -123,6 +129,22 @@ final class HermesViewModel: ObservableObject {
 
     var canSend: Bool {
         connectionState == .connected && activeChat != nil
+    }
+
+    var isGroupChat: Bool { activeChat?.kind == .group }
+
+    /// Bots da sala ativa (só em chat em grupo).
+    var mentionableBots: [GroupMember] {
+        guard isGroupChat, let id = activeChatID else { return [] }
+        let members = groupRooms.first(where: { $0.id == id })?.members ?? []
+        return members.map { member in
+            var copy = member
+            if let profile = profilesByName[member.key]
+                ?? profilesByName.first(where: { $0.key.lowercased() == member.key })?.value {
+                copy.displayName = profile.displayName
+            }
+            return copy
+        }
     }
 
     var serverAddress: String { config.baseURLString }
@@ -1475,15 +1497,56 @@ final class HermesViewModel: ObservableObject {
 
     // MARK: - Drawer: grupos, bots e pins
 
-    func isPinned(_ id: String) -> Bool { pinnedIDs.contains(id) }
+    var serverPinnedIDs: [String] {
+        var ids: [String] = []
+        for room in groupRooms where room.isPinnedOnServer {
+            ids.append(room.id)
+        }
+        for bot in drawerBots where bot.isPinnedOnServer {
+            ids.append(pinKey(forBot: bot.name))
+        }
+        return ids
+    }
+
+    var effectivePinnedIDs: [String] {
+        var seen = Set<String>()
+        var ids: [String] = []
+        for id in pinnedIDs + serverPinnedIDs {
+            if unpinnedIDs.contains(id) { continue }
+            if seen.insert(id).inserted { ids.append(id) }
+        }
+        return ids
+    }
+
+    func isPinned(_ id: String) -> Bool { effectivePinnedIDs.contains(id) }
 
     func togglePin(_ id: String) {
-        if let idx = pinnedIDs.firstIndex(of: id) {
-            pinnedIDs.remove(at: idx)
+        if isPinned(id) {
+            pinnedIDs.removeAll { $0 == id }
+            if serverPinnedIDs.contains(id), !unpinnedIDs.contains(id) {
+                unpinnedIDs.append(id)
+            }
         } else {
-            pinnedIDs.insert(id, at: 0)
+            unpinnedIDs.removeAll { $0 == id }
+            if !pinnedIDs.contains(id) {
+                pinnedIDs.insert(id, at: 0)
+            }
         }
+        persistPins()
+    }
+
+    private func persistPins() {
         UserDefaults.standard.set(pinnedIDs, forKey: Self.pinnedIDsKey)
+        UserDefaults.standard.set(unpinnedIDs, forKey: Self.unpinnedIDsKey)
+    }
+
+    /// Remove o pin automático antigo do Vegapunk (não era escolha do usuário nem do servidor).
+    private static func clearLegacyHardcodedPins(from pins: inout [String]) {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: clearedAutoPinKey) else { return }
+        pins.removeAll { $0.lowercased().contains("vegapunk") }
+        defaults.set(pins, forKey: pinnedIDsKey)
+        defaults.set(true, forKey: clearedAutoPinKey)
     }
 
     var drawerBots: [AgentProfileInfo] {
@@ -1622,9 +1685,10 @@ final class HermesViewModel: ObservableObject {
                 ?? key
             guard !name.isEmpty else { continue }
             let members: [GroupMember] = (obj["members"]?.arrayValue ?? []).compactMap { item in
-                let n = item["name"]?.stringValue ?? item["handle"]?.stringValue ?? ""
-                guard !n.isEmpty else { return nil }
-                return GroupMember(key: n.lowercased(), displayName: ChatSpeaker.prettyName(n))
+                let handle = item["handle"]?.stringValue ?? item["name"]?.stringValue ?? ""
+                let name = item["name"]?.stringValue ?? handle
+                guard !handle.isEmpty else { return nil }
+                return GroupMember(key: handle.lowercased(), displayName: ChatSpeaker.prettyName(name))
             }
             let log = obj["log"] ?? obj["messages"]
             let messages: [ChatMessage] = (log?.arrayValue ?? []).compactMap { entry in
@@ -1648,7 +1712,8 @@ final class HermesViewModel: ObservableObject {
                 messages: messages,
                 preview: preview,
                 lastActivity: lastAt,
-                imageDataURL: obj["image"]?.stringValue
+                imageDataURL: obj["image"]?.stringValue,
+                isPinnedOnServer: obj["pinned"]?.boolValue == true
             ))
         }
         return rooms
@@ -1710,7 +1775,8 @@ final class HermesViewModel: ObservableObject {
                 isDefault: row["is_default"]?.boolValue == true,
                 lastSessionID: last?["id"]?.stringValue ?? last?["resolved_id"]?.stringValue,
                 canonicalSessionID: canonical?["resolved_id"]?.stringValue ?? canonical?["id"]?.stringValue,
-                lastPreview: last?["preview"]?.stringValue ?? canonical?["preview"]?.stringValue
+                lastPreview: last?["preview"]?.stringValue ?? canonical?["preview"]?.stringValue,
+                isPinnedOnServer: botsMeta?["pinned"]?.boolValue == true
             )
             map[info.name] = info
             if let dataURL = meta?["avatar"]?.stringValue ?? meta?["avatar_data"]?.stringValue,
@@ -1720,11 +1786,6 @@ final class HermesViewModel: ObservableObject {
         }
         profilesByName = map
         groupRooms = parseGroupRooms(from: rows)
-        if pinnedIDs.isEmpty {
-            for room in groupRooms where room.name.lowercased().contains("vegapunk") {
-                togglePin(room.id)
-            }
-        }
         for profile in map.values where profile.hasAvatar && avatarDataByProfile[profile.name] == nil {
             await fetchAvatar(for: profile.name)
         }
