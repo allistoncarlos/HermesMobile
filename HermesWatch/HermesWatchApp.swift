@@ -14,6 +14,7 @@ struct HermesWatchApp: App {
             WatchVoiceView(voice: voice)
                 .onAppear {
                     CompanionSync.shared.bind()
+                    CompanionSync.shared.alignToDefaultBotIfNeeded()
                     HermesLaunchActions.shared.restorePendingVoiceIfNeeded()
                     Task { await fulfillSiriVoiceLaunchIfNeeded() }
                 }
@@ -51,10 +52,13 @@ struct HermesWatchApp: App {
     private func fulfillSiriVoiceLaunchIfNeeded() async {
         guard HermesLaunchActions.shared.wantsVoiceSession else { return }
         guard case .connected = CompanionSync.shared.phoneConnection else { return }
-        let profile = HermesLaunchActions.shared.consumeVoiceRequest()
         var command: [String: Any] = ["cmd": "newSession"]
-        if let profile, !profile.isEmpty {
+        let profile = HermesLaunchActions.shared.consumeVoiceRequest()
+        if let profile, !profile.isEmpty, !AgentProfileInfo.isDefaultProfileName(profile) {
+            CompanionSync.shared.activeProfileName = profile.lowercased()
             command["profile"] = profile
+        } else {
+            CompanionSync.shared.alignToDefaultBotIfNeeded()
         }
         CompanionSync.shared.sendCommand(command, expectReply: true)
         // Pequeno atraso para o iPhone criar a sessão antes do primeiro turno.

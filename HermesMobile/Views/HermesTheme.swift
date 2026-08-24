@@ -85,16 +85,7 @@ enum HermesTheme {
     }
 
     static func speakerAccent(for key: String) -> Color {
-        let palette: [Color] = [
-            Color(red: 0.36, green: 0.68, blue: 0.89),
-            Color(red: 0.95, green: 0.61, blue: 0.33),
-            Color(red: 0.62, green: 0.55, blue: 0.90),
-            Color(red: 0.40, green: 0.76, blue: 0.58),
-            Color(red: 0.95, green: 0.45, blue: 0.55),
-            Color(red: 0.30, green: 0.74, blue: 0.78),
-        ]
-        let hash = abs(key.lowercased().unicodeScalars.reduce(0) { $0 &+ Int($1.value) })
-        return palette[hash % palette.count]
+        Color.hermesAccent(hex: nil, fallbackKey: key)
     }
 }
 

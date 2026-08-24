@@ -17,8 +17,40 @@ struct WatchComplicationSlot: Codable, Equatable, Identifiable, Sendable {
     var isDefault: Bool
     var initials: String
     var avatarJPEG: Data?
+    var accentHex: String?
 
     var id: String { profileName }
+
+    enum CodingKeys: String, CodingKey {
+        case profileName, displayName, isDefault, initials, avatarJPEG, accentHex
+    }
+
+    init(
+        profileName: String,
+        displayName: String,
+        isDefault: Bool,
+        initials: String,
+        avatarJPEG: Data?,
+        accentHex: String? = nil
+    ) {
+        self.profileName = profileName
+        self.displayName = displayName
+        self.isDefault = isDefault
+        self.initials = initials
+        self.avatarJPEG = avatarJPEG
+        self.accentHex = accentHex ?? HermesAccentHex.fallback(for: profileName)
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        profileName = try c.decode(String.self, forKey: .profileName)
+        displayName = try c.decode(String.self, forKey: .displayName)
+        isDefault = try c.decode(Bool.self, forKey: .isDefault)
+        initials = try c.decode(String.self, forKey: .initials)
+        avatarJPEG = try c.decodeIfPresent(Data.self, forKey: .avatarJPEG)
+        accentHex = try c.decodeIfPresent(String.self, forKey: .accentHex)
+            ?? HermesAccentHex.fallback(for: profileName)
+    }
 }
 
 struct WatchComplicationRoster: Codable, Equatable, Sendable {
@@ -33,21 +65,24 @@ struct WatchComplicationRoster: Codable, Equatable, Sendable {
                 displayName: "Hermes",
                 isDefault: true,
                 initials: "H",
-                avatarJPEG: nil
+                avatarJPEG: nil,
+                accentHex: "59B8FA"
             ),
             WatchComplicationSlot(
                 profileName: "bot-a",
                 displayName: "Bot",
                 isDefault: false,
                 initials: "A",
-                avatarJPEG: nil
+                avatarJPEG: nil,
+                accentHex: "F29B54"
             ),
             WatchComplicationSlot(
                 profileName: "bot-b",
                 displayName: "Bot",
                 isDefault: false,
                 initials: "B",
-                avatarJPEG: nil
+                avatarJPEG: nil,
+                accentHex: "9E8CE6"
             ),
         ],
         updatedAt: Date(timeIntervalSince1970: 0)
@@ -60,7 +95,8 @@ struct WatchComplicationRoster: Codable, Equatable, Sendable {
                 displayName: "Hermes",
                 isDefault: true,
                 initials: "H",
-                avatarJPEG: nil
+                avatarJPEG: nil,
+                accentHex: "59B8FA"
             ),
         ],
         updatedAt: Date(timeIntervalSince1970: 0)

@@ -93,7 +93,8 @@ extension WatchComplicationRoster {
             displayName: defaultProfile?.displayName ?? "Hermes",
             isDefault: true,
             initials: AgentProfileInfo.initials(from: defaultProfile?.displayName ?? "Hermes"),
-            avatarJPEG: avatars[defaultName] ?? avatars["default"]
+            avatarJPEG: avatars[defaultName] ?? avatars["default"],
+            accentHex: defaultProfile?.accentHex ?? "59B8FA"
         )
 
         let others = profiles.filter {
@@ -115,18 +116,19 @@ extension WatchComplicationRoster {
             .sorted { ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast) }
         ordered.append(contentsOf: remaining)
 
-        let recentSlots = ordered.prefix(2).map { profile in
+        let otherSlots = ordered.prefix(8).enumerated().map { index, profile in
             WatchComplicationSlot(
                 profileName: profile.name,
                 displayName: profile.displayName,
                 isDefault: false,
                 initials: AgentProfileInfo.initials(from: profile.displayName),
-                avatarJPEG: avatars[profile.name]
+                avatarJPEG: index < 2 ? avatars[profile.name] : nil,
+                accentHex: profile.accentHex
             )
         }
 
         return WatchComplicationRoster(
-            slots: [defaultSlot] + recentSlots,
+            slots: [defaultSlot] + otherSlots,
             updatedAt: Date()
         )
     }

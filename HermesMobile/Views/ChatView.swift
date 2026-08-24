@@ -225,14 +225,28 @@ struct ChatView: View {
     }
 
     private func emptyState(metrics: HermesLayoutMetrics) -> some View {
-        VStack(spacing: metrics.isLandscape ? 8 : 14) {
-            Image(systemName: "sparkles")
-                .font(.system(size: metrics.isLandscape ? 28 : 40, weight: .medium))
-                .foregroundStyle(.primary)
-            Text("Como posso ajudar?")
+        let profile = vm.emptyStateProfile
+        let name = profile?.displayName
+            ?? (vm.isGroupChat ? vm.sessionTitle : "Hermes")
+        let summary = profile?.summary?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description: String = {
+            if let summary, !summary.isEmpty { return summary }
+            if vm.isGroupChat, let sub = vm.sessionSubtitle, !sub.isEmpty { return sub }
+            if let profile, !profile.isDefault, !AgentProfileInfo.isDefaultProfileName(profile.name) {
+                return "Pergunte qualquer coisa a \(name)."
+            }
+            return "Pergunte qualquer coisa. O Hermes pode usar ferramentas e executar tarefas no servidor."
+        }()
+        let accent = Color.hermesAccent(hex: profile?.accentHex, fallbackKey: profile?.name ?? "default")
+        let iconSize: CGFloat = metrics.isLandscape ? 44 : 64
+
+        return VStack(spacing: metrics.isLandscape ? 8 : 14) {
+            emptyStateIcon(profile: profile, accent: accent, size: iconSize)
+            Text(name)
                 .font(metrics.isLandscape ? .title3.weight(.semibold) : .title2.weight(.semibold))
+                .multilineTextAlignment(.center)
             if !metrics.isLandscape {
-                Text("Pergunte qualquer coisa. O Hermes pode usar ferramentas e executar tarefas no servidor.")
+                Text(description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -242,6 +256,36 @@ struct ChatView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, metrics.emptyStateTopPadding)
         .padding(.bottom, 20)
+    }
+
+    private func emptyStateIcon(profile: AgentProfileInfo?, accent: Color, size: CGFloat) -> some View {
+        Group {
+            if let key = profile?.name, let data = vm.avatarData(for: key), let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Circle().fill(accent.opacity(0.18))
+                    Image(systemName: emptyStateSymbol(profile))
+                        .font(.system(size: size * 0.42, weight: .semibold))
+                        .foregroundStyle(accent)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(
+            Circle().strokeBorder(accent.opacity(0.45), lineWidth: 1.5)
+        )
+    }
+
+    private func emptyStateSymbol(_ profile: AgentProfileInfo?) -> String {
+        if vm.isGroupChat { return "person.3.fill" }
+        if let profile, !profile.isDefault, !AgentProfileInfo.isDefaultProfileName(profile.name) {
+            return "cpu"
+        }
+        return "sparkles"
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {

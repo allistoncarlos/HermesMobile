@@ -56,6 +56,11 @@ targets:
       - target: HermesWatch
         embed: true
         codeSign: true
+    scheme:
+      management:
+        shared: true
+        orderHint: 0
+        isShown: true
   HermesWatch:
     type: application
     platform: watchOS
@@ -104,6 +109,11 @@ targets:
         embed: true
         codeSign: true
       - sdk: WidgetKit.framework
+    scheme:
+      management:
+        shared: true
+        orderHint: 1
+        isShown: true
   HermesWatchWidgets:
     type: app-extension
     platform: watchOS
@@ -111,6 +121,7 @@ targets:
     sources:
       - path: HermesWatchWidgets
       - path: HermesMobile/Companion/WatchComplicationRoster.swift
+      - path: HermesMobile/Companion/HermesAccent.swift
       - path: HermesMobile/Intents
     info:
       path: HermesWatchWidgets/Info.plist
@@ -143,3 +154,8 @@ targets:
       - sdk: WidgetKit.framework
       - sdk: AppIntents.framework
       - sdk: UIKit.framework
+    scheme:
+      management:
+        shared: true
+        orderHint: 2
+        isShown: false

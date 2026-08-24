@@ -31,6 +31,8 @@ final class HermesViewModel: ObservableObject {
     @Published var pinnedIDs: [String] = []
     /// Pins do servidor que o usuário desafixou só neste aparelho.
     @Published var unpinnedIDs: [String] = []
+    /// Filtro do histórico no drawer (`default`, `atlas`…). Nil = todos os bots.
+    @Published var selectedBotFilter: String?
     /// Chamado quando o assistente completa uma mensagem (para TTS em background).
     var onAssistantMessageComplete: ((String) -> Void)?
 
@@ -132,6 +134,21 @@ final class HermesViewModel: ObservableObject {
     }
 
     var isGroupChat: Bool { activeChat?.kind == .group }
+
+    /// Perfil do bot da conversa vazia (nova conversa / chat de bot).
+    var emptyStateProfile: AgentProfileInfo? {
+        if activeChat?.kind == .group { return nil }
+        if let key = activeChat?.profileName, let profile = profilesByName[key] {
+            return profile
+        }
+        if let filter = selectedBotFilter, !AgentProfileInfo.isDefaultProfileName(filter),
+           let profile = profilesByName[filter] {
+            return profile
+        }
+        return profilesByName.values.first(where: { $0.isDefault })
+            ?? profilesByName["default"]
+            ?? profilesByName["hermes"]
+    }
 
     /// Bots da sala ativa (só em chat em grupo).
     var mentionableBots: [GroupMember] {
@@ -707,6 +724,9 @@ final class HermesViewModel: ObservableObject {
                 let title = (obj["title"] ?? obj["name"])?.stringValue ?? "Conversa"
                 let started = (obj["started_at"] ?? obj["created_at"])?.number.map { Date(timeIntervalSince1970: $0) }
                 let source = obj["source"]?.stringValue
+                    ?? obj["profile"]?.stringValue
+                    ?? obj["agent"]?.stringValue
+                    ?? obj["profile_name"]?.stringValue
                 let active = (obj["is_active"] ?? obj["active"])?.boolValue ?? false
                 return SessionSummary(id: id, title: title, startedAt: started, source: source, isActive: active)
             }
@@ -716,16 +736,17 @@ final class HermesViewModel: ObservableObject {
         }
     }
 
-    func resumeSession(_ summary: SessionSummary) async {
+    @discardableResult
+    func resumeSession(_ summary: SessionSummary) async -> Bool {
         // Se já estiver aberta (por stored id ou id), só foca.
         if let existing = openChats.first(where: {
             $0.id == summary.id || $0.storedSessionID == summary.id
         }) {
             await selectChat(existing.id)
-            return
+            return true
         }
 
-        guard let ws else { return }
+        guard let ws else { return false }
         do {
             let result = try await ws.call(
                 method: "session.resume",
@@ -783,8 +804,10 @@ final class HermesViewModel: ObservableObject {
             syncNotifierContext()
             #endif
             _ = try? await ws.call(method: "session.activate", params: ["session_id": .string(sid)])
+            return true
         } catch {
             statusMessage = "Erro ao abrir a conversa: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -1582,12 +1605,33 @@ final class HermesViewModel: ObservableObject {
     }
 
     var drawerBots: [AgentProfileInfo] {
-        profilesByName.values.sorted {
-            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        profilesByName.values.sorted { a, b in
+            let aDefault = a.isDefault || AgentProfileInfo.isDefaultProfileName(a.name)
+            let bDefault = b.isDefault || AgentProfileInfo.isDefaultProfileName(b.name)
+            if aDefault != bDefault { return aDefault && !bDefault }
+            return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
         }
     }
 
     func pinKey(forBot name: String) -> String { "bot::\(name.lowercased())" }
+
+    func botKey(for session: SessionSummary) -> String {
+        if let raw = session.source, let name = Self.normalizedProfileName(raw) {
+            return AgentProfileInfo.isDefaultProfileName(name) ? "default" : name
+        }
+        if let fromID = ChatSpeaker.profileKey(fromSessionID: session.id) {
+            return fromID
+        }
+        return "default"
+    }
+
+    func displayName(forBotKey key: String) -> String {
+        if let profile = profilesByName[key] { return profile.displayName }
+        if AgentProfileInfo.isDefaultProfileName(key) {
+            return profilesByName.values.first(where: { $0.isDefault })?.displayName ?? "Hermes"
+        }
+        return AgentProfileInfo.prettyName(key)
+    }
 
     func refreshRoster() async {
         await loadProfiles()
@@ -1616,29 +1660,55 @@ final class HermesViewModel: ObservableObject {
         await selectChat(room.id)
     }
 
+    func filterKey(for profile: AgentProfileInfo) -> String {
+        if profile.isDefault || AgentProfileInfo.isDefaultProfileName(profile.name) {
+            return "default"
+        }
+        return profile.name
+    }
+
     func openBotProfile(_ profile: AgentProfileInfo) async {
         rememberRecentBot(profile.name)
+        selectedBotFilter = filterKey(for: profile)
         syncCompanion()
+
+        if profile.isDefault || AgentProfileInfo.isDefaultProfileName(profile.name) {
+            await newSession()
+            return
+        }
+
         let key = pinKey(forBot: profile.name)
-        if let existing = openChats.first(where: { $0.id == key || $0.kind == .bot && $0.title == profile.displayName }) {
+        if let existing = openChats.first(where: { chatMatchesBot($0, profile: profile) }) {
             await selectChat(existing.id)
             return
         }
-        if let sid = profile.canonicalSessionID ?? profile.lastSessionID, !sid.isEmpty {
-            await resumeSession(SessionSummary(id: sid, title: profile.displayName, startedAt: nil, source: profile.name, isActive: false))
-            if var chat = openChats.first(where: { $0.id == sid || $0.storedSessionID == sid }) {
+
+        let candidateIDs = [
+            profile.canonicalSessionID,
+            profile.lastSessionID,
+            sessions.first(where: { botKey(for: $0) == profile.name })?.id,
+        ].compactMap { $0 }.filter { !$0.isEmpty }
+
+        for sid in candidateIDs {
+            let ok = await resumeSession(
+                SessionSummary(id: sid, title: profile.displayName, startedAt: nil, source: profile.name, isActive: false)
+            )
+            if ok, var chat = openChats.first(where: { $0.id == sid || $0.storedSessionID == sid }) {
                 chat.kind = .bot
-                chat.subtitle = profile.summary
+                chat.subtitle = profile.summary ?? chat.subtitle
                 commit(chat)
+                return
             }
-            return
         }
+
         pruneBlankOpenChats(keeping: key)
         var chat = OpenChat(id: key, title: profile.displayName, kind: .bot, subtitle: profile.summary)
         do {
             chat = try await ensureBackingSession(chat)
         } catch {
             statusMessage = error.localizedDescription
+            showSidebar = false
+            return
         }
         if let i = openChats.firstIndex(where: { $0.id == chat.id }) {
             openChats[i] = chat
@@ -1649,6 +1719,21 @@ final class HermesViewModel: ObservableObject {
         syncCompanion()
     }
 
+    private func chatMatchesBot(_ chat: OpenChat, profile: AgentProfileInfo) -> Bool {
+        let key = pinKey(forBot: profile.name)
+        if chat.id == key { return true }
+        if chat.kind == .bot {
+            if chat.profileName == profile.name { return true }
+            if chat.title.caseInsensitiveCompare(profile.displayName) == .orderedSame { return true }
+        }
+        if let stored = chat.storedSessionID,
+           let session = sessions.first(where: { $0.id == stored }),
+           botKey(for: session) == profile.name {
+            return true
+        }
+        return false
+    }
+
     private func ensureBackingSession(_ chat: OpenChat) async throws -> OpenChat {
         var chat = chat
         if let sid = chat.backingSessionID, !sid.isEmpty { return chat }
@@ -1657,13 +1742,24 @@ final class HermesViewModel: ObservableObject {
         if chat.kind == .bot {
             let name = chat.id.hasPrefix("bot::") ? String(chat.id.dropFirst(5)) : chat.title.lowercased()
             params["profile"] = .string(name)
+            params["profile_name"] = .string(name)
+            params["agent"] = .string(name)
         }
         let result: JSONValue
         do {
             result = try await ws.call(method: "session.create", params: params)
         } catch {
             if params["profile"] != nil {
-                result = try await ws.call(method: "session.create", params: ["cols": .number(80)])
+                var retry = params
+                retry.removeValue(forKey: "agent")
+                retry.removeValue(forKey: "profile_name")
+                do {
+                    result = try await ws.call(method: "session.create", params: retry)
+                } catch {
+                    retry.removeValue(forKey: "profile")
+                    retry["profile_name"] = params["profile"]
+                    result = try await ws.call(method: "session.create", params: retry)
+                }
             } else {
                 throw error
             }

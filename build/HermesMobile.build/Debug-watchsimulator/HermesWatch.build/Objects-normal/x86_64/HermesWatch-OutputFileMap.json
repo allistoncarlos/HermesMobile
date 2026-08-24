@@ -1,0 +1,159 @@
+{
+  "" : {
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatch-primary.dia",
+    "emit-module-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatch-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatch-primary-emit-module.dia",
+    "pch" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatch-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatch-primary.swiftdeps"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Companion/CompanionSync.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/CompanionSync~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Companion/HermesAccent.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAccent~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Companion/WatchComplicationRoster.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchComplicationRoster~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Intents/HermesLaunchActions.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesLaunchActions~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Intents/StartHermesVoiceIntent.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/StartHermesVoiceIntent~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Networking/Models.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/Models~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Voice/HermesAudioSession.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesAudioSession~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Voice/HermesSpeechPlayer.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesSpeechPlayer~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Voice/SpeechSanitizer.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/SpeechSanitizer~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Voice/VoiceModeController.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceModeController~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesMobile/Voice/VoiceRecorder.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/VoiceRecorder~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesWatch/HermesWatchApp.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/HermesWatchApp~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesWatch/WatchRuntimeSession.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchRuntimeSession~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/HermesWatch/WatchVoiceView.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/WatchVoiceView~partial.swiftmodule"
+  },
+  "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/alliston/Developer/iOS/HermesMobile/build/HermesMobile.build/Debug-watchsimulator/HermesWatch.build/Objects-normal/x86_64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}
