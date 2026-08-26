@@ -25,7 +25,7 @@ final class HermesSpeechPlayer: NSObject, ObservableObject, AVAudioPlayerDelegat
     func play(_ audio: SpokenAudio) throws {
         stop(interrupted: false)
 
-        try HermesAudioSession.activatePlayAndRecord()
+        try HermesAudioSession.activatePlayback()
         #if os(iOS)
         retainBackground()
         installResumeObserver()

@@ -83,7 +83,7 @@ final class BackgroundRuntime {
         latestSubtitle = subtitle
         if !nowPlayingActive {
             UIApplication.shared.beginReceivingRemoteControlEvents()
-            try? AVAudioSession.sharedInstance().setActive(true)
+            // Não força setActive aqui: a sessão só sobe em playback/record explícitos.
             nowPlayingActive = true
         }
         var info = [String: Any]()

@@ -180,6 +180,9 @@ final class VoiceModeController: ObservableObject {
         silenceProgress = 0
         isHearingSpeech = false
         releaseSessionBackground()
+        #if os(iOS)
+        HermesAudioSession.deactivate()
+        #endif
     }
 
     /// Fala disparada pelo servidor (chat / turno em background) sem abrir o modo voz.
@@ -212,10 +215,12 @@ final class VoiceModeController: ObservableObject {
         guard let client = vm?.httpClient else { return }
         retainSessionBackground(reason: "Hermes falando")
         defer {
-            if !isActive { releaseSessionBackground() }
+            if !isActive {
+                releaseSessionBackground()
+                HermesAudioSession.deactivate()
+            }
         }
         do {
-            try HermesAudioSession.activatePlayAndRecord()
             let audio = try await client.speakText(text)
             guard !Task.isCancelled else { return }
             try player.play(audio)

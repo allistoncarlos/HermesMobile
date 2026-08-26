@@ -171,8 +171,7 @@ final class HermesSpeakStream: NSObject {
         eng.connect(node, to: eng.mainMixerNode, format: format)
 
         do {
-            try HermesAudioSession.activatePlayAndRecord()
-            HermesAudioSession.reassertIfNeeded()
+            try HermesAudioSession.activatePlayback()
             try eng.start()
             node.play()
             engine = eng
