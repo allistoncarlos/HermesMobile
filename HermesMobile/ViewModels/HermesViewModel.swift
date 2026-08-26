@@ -33,6 +33,25 @@ final class HermesViewModel: ObservableObject {
     @Published var unpinnedIDs: [String] = []
     /// Chamado quando o assistente completa uma mensagem (para TTS em background).
     var onAssistantMessageComplete: ((String) -> Void)?
+    /// Chamado ao desligar “Ler em Voz Alta” para interromper TTS em andamento.
+    var onSpeakRepliesDisabled: (() -> Void)?
+
+    /// Preferência global: ler respostas em voz alta (UserDefaults via `ServerConfig`).
+    var speakRepliesAutomatically: Bool {
+        get { config.speakRepliesAutomatically }
+        set {
+            guard config.speakRepliesAutomatically != newValue else { return }
+            config.speakRepliesAutomatically = newValue
+            objectWillChange.send()
+            if !newValue {
+                onSpeakRepliesDisabled?()
+            }
+        }
+    }
+
+    func toggleSpeakRepliesAutomatically() {
+        speakRepliesAutomatically.toggle()
+    }
 
     /// App em foreground (atualizado pelo HermesMobileApp via scenePhase).
     var isAppForeground: Bool = true {
@@ -1161,7 +1180,7 @@ final class HermesViewModel: ObservableObject {
                     ?? ""
                 let trimmed = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
-                    if config.speakRepliesAutomatically {
+                    if speakRepliesAutomatically {
                         onAssistantMessageComplete?(trimmed)
                     }
                     #if os(iOS)

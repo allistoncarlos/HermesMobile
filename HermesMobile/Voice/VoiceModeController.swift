@@ -185,13 +185,27 @@ final class VoiceModeController: ObservableObject {
         #endif
     }
 
+    /// Interrompe TTS de “Ler em Voz Alta” (não encerra o modo voz handsfree).
+    func stopReadAloud() {
+        standaloneSpeakTask?.cancel()
+        standaloneSpeakTask = nil
+        #if os(iOS)
+        guard !isActive else { return }
+        speakStream?.stop()
+        speakStream = nil
+        player.stop(interrupted: true)
+        releaseSessionBackground()
+        HermesAudioSession.deactivate()
+        #endif
+    }
+
     /// Fala disparada pelo servidor (chat / turno em background) sem abrir o modo voz.
     /// Se o loop de voz já estiver ativo, ignora (ele mesmo fala a resposta).
     func speakServerPush(_ text: String) {
         #if os(watchOS)
         return
         #else
-        guard let vm, vm.config.speakRepliesAutomatically else { return }
+        guard let vm, vm.speakRepliesAutomatically else { return }
         if isActive {
             switch phase {
             case .listening, .transcribing, .processing, .speaking:
@@ -223,6 +237,7 @@ final class VoiceModeController: ObservableObject {
         do {
             let audio = try await client.speakText(text)
             guard !Task.isCancelled else { return }
+            guard vm?.speakRepliesAutomatically == true else { return }
             try player.play(audio)
             // Aguarda o fim do áudio sem voltar ao loop de escuta.
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in

@@ -50,6 +50,9 @@ struct ChatView: View {
             vm.onAssistantMessageComplete = { text in
                 voice.speakServerPush(text)
             }
+            vm.onSpeakRepliesDisabled = {
+                voice.stopReadAloud()
+            }
             Task { await fulfillSiriVoiceLaunchIfNeeded() }
             fulfillSiriVoiceStopIfNeeded()
         }
@@ -286,6 +289,8 @@ struct ChatView: View {
                     .focused($inputFocused)
                     .padding(.vertical, metrics.isLandscape ? 8 : 10)
 
+                    readAloudButton
+
                     if showVoiceButton {
                         Button {
                             inputFocused = false
@@ -351,6 +356,27 @@ struct ChatView: View {
         }
         .disabled(!vm.canSend || vm.isStreaming || vm.hasPendingClarify || isSending)
         .accessibilityLabel("Anexar")
+    }
+
+    /// Toggle global “Ler em Voz Alta” (paridade com Hermes Desktop / Read replies aloud).
+    private var readAloudButton: some View {
+        let enabled = vm.speakRepliesAutomatically
+        return Button {
+            vm.toggleSpeakRepliesAutomatically()
+        } label: {
+            Image(systemName: enabled ? "speaker.wave.2.fill" : "speaker.slash")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(enabled ? Color.primary : Color.secondary)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(enabled ? Color.clear : HermesTheme.rowHover)
+                )
+        }
+        .accessibilityLabel("Ler em Voz Alta")
+        .accessibilityValue(enabled ? "Ativado" : "Desativado")
+        .accessibilityHint("Lê em voz alta as respostas do Hermes nesta e nas próximas sessões.")
+        .accessibilityAddTraits(enabled ? .isSelected : [])
     }
 
     private var attachmentStrip: some View {

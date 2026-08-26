@@ -23,13 +23,9 @@ final class ServerConfig: ObservableObject {
         didSet { UserDefaults.standard.set(username, forKey: Keys.username) }
     }
 
-    /// Fala respostas do servidor automaticamente (chat + background), sem pedir de novo.
-    var speakRepliesAutomatically: Bool {
-        get {
-            if UserDefaults.standard.object(forKey: Keys.speakAuto) == nil { return true }
-            return UserDefaults.standard.bool(forKey: Keys.speakAuto)
-        }
-        set { UserDefaults.standard.set(newValue, forKey: Keys.speakAuto) }
+    /// “Ler em Voz Alta” — TTS das respostas (global; vale para a sessão atual e as novas).
+    @Published var speakRepliesAutomatically: Bool {
+        didSet { UserDefaults.standard.set(speakRepliesAutomatically, forKey: Keys.speakAuto) }
     }
 
     /// Sessão já estabelecida com sucesso neste dispositivo (para auto-reconnect).
@@ -52,6 +48,11 @@ final class ServerConfig: ObservableObject {
         self.baseURLString = UserDefaults.standard.string(forKey: Keys.baseURL) ?? ""
         self.sessionToken  = KeychainHelper.read(key: Keys.token) ?? ""
         self.username      = UserDefaults.standard.string(forKey: Keys.username) ?? ""
+        if UserDefaults.standard.object(forKey: Keys.speakAuto) == nil {
+            self.speakRepliesAutomatically = true
+        } else {
+            self.speakRepliesAutomatically = UserDefaults.standard.bool(forKey: Keys.speakAuto)
+        }
         // Migração: remove senha que versões anteriores guardavam no Keychain.
         KeychainHelper.save(token: "", forKey: Keys.password)
         // Recoloca cookies de sessão (AT/RT) no jar HTTP antes de qualquer request.
