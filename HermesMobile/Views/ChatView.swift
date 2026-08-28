@@ -56,7 +56,7 @@ struct ChatView: View {
             Task { await fulfillSiriVoiceLaunchIfNeeded() }
             fulfillSiriVoiceStopIfNeeded()
         }
-        .onChange(of: vm.connectionState) { _, _ in
+        .onChangeValue(of: vm.connectionState) { _ in
             Task { await fulfillSiriVoiceLaunchIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .hermesStartVoice)) { _ in
@@ -92,7 +92,7 @@ struct ChatView: View {
         } message: {
             Text(attachError ?? "")
         }
-        .onChange(of: photoPickerItems) { _, items in
+        .onChangeValue(of: photoPickerItems) { items in
             Task { await loadLibraryItems(items) }
         }
     }
@@ -207,21 +207,21 @@ struct ChatView: View {
                 .frame(maxWidth: HermesTheme.chatMaxWidth)
                 .frame(maxWidth: .infinity)
             }
-            .onChange(of: vm.messages.count) { _, _ in
+            .onChangeValue(of: vm.messages.count) { _ in
                 scrollToBottom(proxy)
             }
-            .onChange(of: vm.messages.last?.text) { _, _ in
+            .onChangeValue(of: vm.messages.last?.text) { _ in
                 withAnimation(.easeOut(duration: 0.1)) {
                     if let last = vm.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
-            .onChange(of: vm.toolStatusText) { _, status in
+            .onChangeValue(of: vm.toolStatusText) { status in
                 guard status != nil else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     if let last = vm.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
-            .onChange(of: vm.activeChatID) { _, _ in
+            .onChangeValue(of: vm.activeChatID) { _ in
                 scrollToBottom(proxy)
             }
         }

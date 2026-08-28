@@ -43,7 +43,7 @@ extension StartHermesVoiceIntent: AudioRecordingIntent {}
 struct OpenHermesVoiceProfileIntent: AppIntent {
     static var title: LocalizedStringResource = "Falar com um perfil do Hermes"
     static var description = IntentDescription(
-        "Abre o Hermes no Apple Watch com a fala ativa no perfil escolhido."
+        "Abre o Hermes no relógio com a fala ativa no perfil escolhido."
     )
     static var openAppWhenRun: Bool = true
 

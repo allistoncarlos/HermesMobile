@@ -248,7 +248,7 @@ private struct ReasoningIndicator: View {
         .onAppear {
             if isStreaming { expanded = true }
         }
-        .onChange(of: isStreaming) { _, streaming in
+        .onChangeValue(of: isStreaming) { streaming in
             if streaming { expanded = true }
         }
     }

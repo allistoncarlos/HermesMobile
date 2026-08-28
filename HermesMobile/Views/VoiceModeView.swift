@@ -144,7 +144,7 @@ struct VoiceModeView: View {
             Image(systemName: orbIcon)
                 .font(.system(size: size > 140 ? 36 : 28, weight: .medium))
                 .foregroundStyle(.white.opacity(0.95))
-                .symbolEffect(.variableColor.iterative, isActive: isAnimatingIcon)
+                .hermesVariableSymbolEffect(isActive: isAnimatingIcon)
         }
         .frame(height: size + 80)
         .contentShape(Rectangle())

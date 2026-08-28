@@ -58,7 +58,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "FB443196EDDCB288583C1F46"
             BuildableName = "HermesWatchWidgets.appex"
-            BlueprintName = "HermesWatchWidgets"
             ReferencedContainer = "container:HermesMobile.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -75,7 +74,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "FB443196EDDCB288583C1F46"
             BuildableName = "HermesWatchWidgets.appex"
-            BlueprintName = "HermesWatchWidgets"
             ReferencedContainer = "container:HermesMobile.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

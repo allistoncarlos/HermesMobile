@@ -133,3 +133,34 @@ struct ChatColumn<Content: View>: View {
             .frame(maxWidth: .infinity)
     }
 }
+
+// MARK: - Compat iOS 16.5 (no 17+ o caminho atual permanece)
+
+extension View {
+    /// `onChange` com o valor novo. iOS 17+ usa a API de dois parâmetros.
+    func onChangeValue<V: Equatable>(of value: V, perform action: @escaping (V) -> Void) -> some View {
+        modifier(OnChangeValueModifier(value: value, action: action))
+    }
+
+    @ViewBuilder
+    func hermesVariableSymbolEffect(isActive: Bool) -> some View {
+        if #available(iOS 17.0, *) {
+            symbolEffect(.variableColor.iterative, isActive: isActive)
+        } else {
+            self
+        }
+    }
+}
+
+private struct OnChangeValueModifier<V: Equatable>: ViewModifier {
+    let value: V
+    let action: (V) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.onChange(of: value) { _, newValue in action(newValue) }
+        } else {
+            content.onChange(of: value, perform: action)
+        }
+    }
+}

@@ -113,7 +113,7 @@ struct WatchComplicationRoster: Codable, Equatable, Sendable {
 
 enum WatchComplicationStore {
     static let widgetKind = "HermesBots"
-    static let appGroupID = "group.com.hermesmobile.app.watchkitapp"
+    static let appGroupID = "group.com.allistoncarlos.HermesMobile.watchkitapp"
     static let rosterKey = "hermes.watch.roster"
     static let pendingVoiceProfileKey = "hermes.pendingVoiceProfile"
 

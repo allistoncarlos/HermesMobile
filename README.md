@@ -13,7 +13,7 @@ The app talks **directly** to your Hermes HTTP/WebSocket backend (`hermes serve`
 
 ### How to open
 
-1. Install **Xcode** (Xcode 15+; deployment target iOS 17.0 / watchOS 10.0).
+1. Install **Xcode** (Xcode 15+; deployment target iOS 16.5 / watchOS 10.0).
 2. Open `HermesMobile.xcodeproj` in Xcode.
 3. In **Signing & Capabilities**, pick **your** Apple Development Team (this repo does not include a team ID).
 4. Choose a simulator or device and run the `HermesMobile` scheme (the Watch app is embedded).
@@ -124,7 +124,7 @@ O app **não** depende do `hermes-webui` nem de nenhum serviço intermediário: 
 
 ### Como abrir
 
-1. Instale o **Xcode** (Xcode 15+; deployment target iOS 17.0 / watchOS 10.0).
+1. Instale o **Xcode** (Xcode 15+; deployment target iOS 16.5 / watchOS 10.0).
 2. Abra `HermesMobile.xcodeproj` no Xcode.
 3. Em **Signing & Capabilities**, escolha o **seu** Apple Development Team (o projeto não inclui team ID).
 4. Selecione um simulador ou dispositivo e rode o esquema `HermesMobile` (o app do Watch é embutido).

@@ -3,8 +3,9 @@ import UserNotifications
 import UIKit
 
 // ============================================================================
-//  HermesNotifier — notificações locais de sistema (paridade com o Desktop).
-//  Alerta quando o agente responde / pede aprovação e a UI não está olhando.
+//  HermesNotifier — notificações locais de sistema.
+//  Resposta do agente: banner/som sempre (foreground e background).
+//  Aprovação / pergunta / erro: só se a UI não está olhando aquele chat.
 // ============================================================================
 
 @MainActor
@@ -43,6 +44,7 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         registerCategories()
+        Task { await requestAuthorizationIfNeeded() }
     }
 
     func setForeground(_ foreground: Bool) {
@@ -69,7 +71,8 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
 
 
     func notifyReplyReady(sessionID: String, title: String, body: String) {
-        guard shouldNotify(for: sessionID) else { return }
+        // Resposta do agente: sempre alerta (foreground e background),
+        // inclusive se o usuário já estiver olhando este chat.
         post(
             category: Category.reply,
             sessionID: sessionID,
@@ -77,6 +80,7 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
             body: truncate(body),
             kind: "reply"
         )
+        hapticIfForeground()
     }
 
     func notifyApproval(sessionID: String, message: String) {
@@ -125,11 +129,18 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
 
-    /// Notifica se o app não está em foreground olhando exatamente esse chat.
+    /// Aprovação / pergunta / erro: só se o app não está olhando exatamente esse chat.
     private func shouldNotify(for sessionID: String) -> Bool {
         if !isForeground { return true }
         if let active = activeChatID, active == sessionID { return false }
         return true
+    }
+
+    private func hapticIfForeground() {
+        guard isForeground else { return }
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.success)
     }
 
     private func post(category: String, sessionID: String, title: String, body: String, kind: String) {
@@ -147,7 +158,11 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
 
         let id = "\(kind).\(sessionID).\(UUID().uuidString)"
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                NSLog("HermesNotifier: falha ao postar: \(error.localizedDescription)")
+            }
+        }
     }
 
     private func truncate(_ text: String, limit: Int = 180) -> String {
@@ -178,15 +193,8 @@ final class HermesNotifier: NSObject, UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        Task { @MainActor in
-            // Em foreground: banner só se não for o chat ativo.
-            let sid = notification.request.content.userInfo[Keys.sessionID] as? String
-            if let sid, let active = self.activeChatID, sid == active {
-                completionHandler([])
-            } else {
-                completionHandler([.banner, .sound, .badge, .list])
-            }
-        }
+        // Síncrono: um hop async aqui faz o iOS descartar o banner em foreground.
+        completionHandler([.banner, .sound, .badge, .list])
     }
 
     nonisolated func userNotificationCenter(

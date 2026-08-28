@@ -561,7 +561,10 @@ struct HermesStatus: Decodable {
     }
 
     var usesCookieAuth: Bool {
-        authRequired == true && (authFlows?.contains("cookie") == true || authProviders?.isEmpty == false)
+        guard authRequired ?? false else { return false }
+        if let flows = authFlows, flows.contains("cookie") { return true }
+        if let providers = authProviders, !providers.isEmpty { return true }
+        return false
     }
 }
 
