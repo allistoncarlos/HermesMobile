@@ -2,7 +2,7 @@ name: HermesMobile
 options:
   bundleIdPrefix: com.hermesmobile
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "16.5"
     watchOS: "10.0"
   createIntermediateGroups: true
   xcodeVersion: "16.0"
@@ -14,7 +14,7 @@ targets:
   HermesMobile:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "16.5"
     sources:
       - HermesMobile
     info:

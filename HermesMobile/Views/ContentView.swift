@@ -174,7 +174,7 @@ struct ChatShellView: View {
                 }
             })
         }
-        .onChange(of: vm.activeChatID) { _, _ in
+        .onChangeValue(of: vm.activeChatID) { _ in
             withAnimation(HermesTheme.drawerSpring) {
                 vm.showSidebar = false
             }
@@ -248,7 +248,7 @@ struct SidebarDrawer<Sidebar: View, Content: View>: View {
                         .highPriorityGesture(horizontalDrag(sidebarWidth: sidebarWidth, mode: .open))
                 }
             }
-            .onChange(of: isPresented) { _, _ in
+            .onChangeValue(of: isPresented) { _ in
                 if !isDragging {
                     dragTranslation = 0
                 }

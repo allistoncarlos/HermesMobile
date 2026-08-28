@@ -84,23 +84,39 @@ final class VoiceRecorder: NSObject, ObservableObject {
 
     static func requestPermission() async -> Bool {
         await withCheckedContinuation { cont in
-            AVAudioApplication.requestRecordPermission { cont.resume(returning: $0) }
+            if #available(iOS 17.0, watchOS 10.0, *) {
+                AVAudioApplication.requestRecordPermission { cont.resume(returning: $0) }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { cont.resume(returning: $0) }
+            }
         }
     }
 
     func start() throws {
         stop(discard: true)
 
-        let permission = AVAudioApplication.shared.recordPermission
-        switch permission {
-        case .granted:
-            break
-        case .denied:
-            throw RecorderError.microphoneDenied
-        case .undetermined:
-            throw RecorderError.startFailed("Permissão de microfone ainda não concedida.")
-        @unknown default:
-            throw RecorderError.microphoneDenied
+        if #available(iOS 17.0, watchOS 10.0, *) {
+            switch AVAudioApplication.shared.recordPermission {
+            case .granted:
+                break
+            case .denied:
+                throw RecorderError.microphoneDenied
+            case .undetermined:
+                throw RecorderError.startFailed("Permissão de microfone ainda não concedida.")
+            @unknown default:
+                throw RecorderError.microphoneDenied
+            }
+        } else {
+            switch AVAudioSession.sharedInstance().recordPermission {
+            case .granted:
+                break
+            case .denied:
+                throw RecorderError.microphoneDenied
+            case .undetermined:
+                throw RecorderError.startFailed("Permissão de microfone ainda não concedida.")
+            @unknown default:
+                throw RecorderError.microphoneDenied
+            }
         }
 
         try configureSession()

@@ -18,7 +18,7 @@ struct HermesMobileApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
-                .onChange(of: scenePhase) { _, phase in
+                .onChangeValue(of: scenePhase) { phase in
                     #if os(iOS)
                     BackgroundRuntime.shared.handleScenePhase(phase)
                     if phase == .background || phase == .inactive {
@@ -38,7 +38,7 @@ struct HermesMobileApp: App {
                     }
                     #endif
                 }
-                .onChange(of: viewModel.activeChatID) { _, id in
+                .onChangeValue(of: viewModel.activeChatID) { id in
                     #if os(iOS)
                     HermesNotifier.shared.activeChatID = id
                     #endif
