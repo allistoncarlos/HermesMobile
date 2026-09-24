@@ -12,6 +12,8 @@ struct ChatSidebarView: View {
     var isEmbedded: Bool = false
 
     @State private var pendingDelete: PendingDelete?
+    @State private var showDeviceNameAlert = false
+    @State private var deviceNameDraft = ""
 
     private struct PendingDelete: Identifiable {
         let id: String
@@ -331,6 +333,13 @@ struct ChatSidebarView: View {
         .task {
             await vm.loadSessions()
         }
+        .alert("Nome deste dispositivo", isPresented: $showDeviceNameAlert) {
+            TextField("iPhone-de-Alliston", text: $deviceNameDraft)
+            Button("Cancelar", role: .cancel) {}
+            Button("Salvar") { HermesDeviceIdentity.setDeviceName(deviceNameDraft) }
+        } message: {
+            Text("As novas conversas serão identificadas no servidor como \(HermesDeviceIdentity.platform).<nome>.")
+        }
         .alert(
             "Excluir conversa?",
             isPresented: Binding(
@@ -372,6 +381,12 @@ struct ChatSidebarView: View {
 
     private var footer: some View {
         Menu {
+            Button {
+                deviceNameDraft = HermesDeviceIdentity.deviceName
+                showDeviceNameAlert = true
+            } label: {
+                Label("Nome deste dispositivo", systemImage: "iphone")
+            }
             Button {
                 Task { await vm.logout() }
             } label: {

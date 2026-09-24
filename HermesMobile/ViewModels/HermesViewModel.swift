@@ -624,7 +624,7 @@ final class HermesViewModel: ObservableObject {
     private func createSession() async {
         guard let ws else { return }
         do {
-            let result = try await ws.call(method: "session.create", params: ["cols": .number(80)])
+            let result = try await ws.call(method: "session.create", params: sessionOriginParams(["cols": .number(80)]))
             if let sid = result["session_id"]?.stringValue {
                 let stored = result["stored_session_id"]?.stringValue ?? sid
                 let chat = OpenChat(id: sid, storedSessionID: stored, title: "Nova conversa")
@@ -690,7 +690,7 @@ final class HermesViewModel: ObservableObject {
 
         guard let ws else { return }
         do {
-            let result = try await ws.call(method: "session.create", params: ["cols": .number(80)])
+            let result = try await ws.call(method: "session.create", params: sessionOriginParams(["cols": .number(80)]))
             if let sid = result["session_id"]?.stringValue {
                 let stored = result["stored_session_id"]?.stringValue ?? sid
                 pruneBlankOpenChats(keeping: nil)
@@ -833,6 +833,17 @@ final class HermesViewModel: ObservableObject {
         await deleteSession(storedID: sid)
     }
 
+    /// Marca a origem da sessão (`source = ios.<dispositivo>`); o servidor grava como veio.
+    private func sessionOriginParams(_ params: [String: JSONValue]) -> [String: JSONValue] {
+        #if os(iOS)
+        var out = params
+        out["source"] = .string(HermesDeviceIdentity.sourceTag)
+        return out
+        #else
+        return params
+        #endif
+    }
+
     func loadSessions(limit: Int = 50) async {
         // Preferência: agregador REST de todos os perfis (traz bot dono + pins do servidor).
         if let client = httpClient, let rows = try? await client.fetchAllProfileSessions(limit: max(limit, 200)) {
@@ -885,7 +896,7 @@ final class HermesViewModel: ObservableObject {
             if let profile = summary.profile, !AgentProfileInfo.isDefaultProfileName(profile) {
                 resumeParams["profile"] = .string(profile)
             }
-            let result = try await ws.call(method: "session.resume", params: resumeParams)
+            let result = try await ws.call(method: "session.resume", params: sessionOriginParams(resumeParams))
             let sid = result["session_id"]?.stringValue ?? summary.id
             var chat = OpenChat(
                 id: sid,
@@ -1905,6 +1916,7 @@ final class HermesViewModel: ObservableObject {
         }
         let result: JSONValue
         do {
+            params = sessionOriginParams(params)
             result = try await ws.call(method: "session.create", params: params)
         } catch {
             if params["profile"] != nil {
