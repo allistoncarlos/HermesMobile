@@ -53,6 +53,27 @@ final class HermesWebSocket: @unchecked Sendable {
         return task?.state == .running
     }
 
+    /// Sonda o socket com um ping. Após suspensão do app o `task.state` ainda pode
+    /// dizer `.running` com o TCP morto — só o pong prova que está vivo.
+    func checkAlive(timeout: TimeInterval = 3) async -> Bool {
+        let t: URLSessionWebSocketTask?
+        lock.lock(); t = (reading ? task : nil); lock.unlock()
+        guard let t, t.state == .running else { return false }
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            let once = NSLock()
+            var done = false
+            func finish(_ value: Bool) {
+                once.lock()
+                if done { once.unlock(); return }
+                done = true
+                once.unlock()
+                cont.resume(returning: value)
+            }
+            t.sendPing { error in finish(error == nil) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { finish(false) }
+        }
+    }
+
     init(url: URL, sessionToken: String? = nil, urlSession: URLSession = .shared) {
         self.url = url
         self.sessionToken = sessionToken
