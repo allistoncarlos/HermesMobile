@@ -709,6 +709,7 @@ final class HermesViewModel: ObservableObject {
     }
 
     func selectChat(_ id: String) async {
+        await ensureLiveConnection()
         guard openChats.contains(where: { $0.id == id }) else { return }
         activeChatID = id
         clearAttention(for: id)
@@ -871,6 +872,7 @@ final class HermesViewModel: ObservableObject {
             return true
         }
 
+        await ensureLiveConnection()
         guard let ws else { return false }
         do {
             let result = try await ws.call(
@@ -1795,6 +1797,7 @@ final class HermesViewModel: ObservableObject {
     }
 
     func openBotProfile(_ profile: AgentProfileInfo) async {
+        await ensureLiveConnection()
         rememberRecentBot(profile.name)
         selectedBotFilter = filterKey(for: profile)
         syncCompanion()

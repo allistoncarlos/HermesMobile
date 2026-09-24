@@ -197,13 +197,13 @@ final class HermesWebSocket: @unchecked Sendable {
 
 
     /// Envia uma requisição JSON-RPC e aguarda a resposta (corresponde ao `id`).
-    /// - Parameter timeoutSeconds: se > 0, falha com timeout em vez de esperar para sempre
-    ///   (importante em uploads grandes de anexo).
+    /// - Parameter timeoutSeconds: falha com timeout em vez de esperar para sempre num
+    ///   socket meio-morto (uploads grandes de anexo passam um valor maior). 0 = sem limite.
     @discardableResult
     func call(
         method: String,
         params: [String: JSONValue] = [:],
-        timeoutSeconds: TimeInterval = 0
+        timeoutSeconds: TimeInterval = 45
     ) async throws -> JSONValue {
         let id: Int
         lock.lock()
