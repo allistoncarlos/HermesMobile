@@ -42,7 +42,6 @@
 		90F3E56BC5B0DB4C99B24D4B /* WatchComplicationRoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = C590BC335784D8E335DE2FA9 /* WatchComplicationRoster.swift */; };
 		96014A16D46888B08F9FEFCC /* HermesNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDB2CD3551D41537E50EF52C /* HermesNotifier.swift */; };
 		972CF7C19891F2FA9B46F9BD /* HermesDeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A117D43E1068963A39AFE2D /* HermesDeviceIdentity.swift */; };
-		9B76F9D7FDD1D586C34FBD88 /* ChatHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165450CD9028597CC0F6B4CA /* ChatHistoryView.swift */; };
 		9F2FEDDE595545B958BE5340 /* StartHermesVoiceIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA6B6CE802F0EAE7ECE60E6 /* StartHermesVoiceIntent.swift */; };
 		A0D6F03F6CD6BF00671061F8 /* HermesLaunchActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EFB61CB1A51794840DA2DB7 /* HermesLaunchActions.swift */; };
 		A122FAFFC1F52DB84C8AAE60 /* HermesWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CFF3A6A9EEDD9168D5788DF5 /* HermesWatch.app */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -114,7 +113,6 @@
 		0BDD9A6EF521CEC4A4902785 /* ServerSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSetupView.swift; sourceTree = "<group>"; };
 		0FFA11BB476FC02DF081BA95 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		10E73FD3959F4856FEFB4DDE /* HermesSpeakStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesSpeakStream.swift; sourceTree = "<group>"; };
-		165450CD9028597CC0F6B4CA /* ChatHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryView.swift; sourceTree = "<group>"; };
 		189CF1091FF2F645122DECCD /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		1AFEF03E9948BA424BB37999 /* HermesClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesClient.swift; sourceTree = "<group>"; };
 		2A4360BC50E5302E71970AC8 /* HermesWatchWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWatchWidgets.swift; sourceTree = "<group>"; };
@@ -151,7 +149,7 @@
 		CA02F1D1768D78BF7A95ADFA /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		CFF3A6A9EEDD9168D5788DF5 /* HermesWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DAFE4C42BBB290587C7A8C74 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
-		E11909D98B0F5781E0DA91D1 /* HermesMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E11909D98B0F5781E0DA91D1 /* HermesMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HermesMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E65C06BC1BB85CF96F28E7C6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E7429591D4750B1CB9002073 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EC231C2E4F4DE4B6506DC9BF /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -197,7 +195,6 @@
 		0BEEFDC62BF90FFC62675413 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				165450CD9028597CC0F6B4CA /* ChatHistoryView.swift */,
 				AF281B15581BEC7E00CDE083 /* ChatSidebarView.swift */,
 				0FFA11BB476FC02DF081BA95 /* ChatView.swift */,
 				E65C06BC1BB85CF96F28E7C6 /* ContentView.swift */,
@@ -518,7 +515,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				4486B988E25C9E6C0C351C9B /* BackgroundRuntime.swift in Sources */,
-				9B76F9D7FDD1D586C34FBD88 /* ChatHistoryView.swift in Sources */,
 				8B80B1CCFA68ED00E2E56F07 /* ChatSidebarView.swift in Sources */,
 				D4F90A6D78D5A57DFE7FA4A5 /* ChatView.swift in Sources */,
 				2907674BE9BF83FAFA43E229 /* CompanionSync.swift in Sources */,
@@ -628,13 +624,8 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = HermesWatchWidgets/HermesWatchWidgets.entitlements;
-				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				INFOPLIST_FILE = HermesWatchWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.allistoncarlos.HermesMobile.watchkitapp.widgets;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -650,7 +641,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HermesWatch/HermesWatch.entitlements;
-				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesWatch/Resources/Info.plist;
 				INFOPLIST_KEY_WKApplication = YES;
@@ -732,13 +722,8 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = HermesWatchWidgets/HermesWatchWidgets.entitlements;
-				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				INFOPLIST_FILE = HermesWatchWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.allistoncarlos.HermesMobile.watchkitapp.widgets;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -754,7 +739,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HermesWatch/HermesWatch.entitlements;
-				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesWatch/Resources/Info.plist;
 				INFOPLIST_KEY_WKApplication = YES;
@@ -773,7 +757,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.5;
@@ -793,7 +776,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.5;

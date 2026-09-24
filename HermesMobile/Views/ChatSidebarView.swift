@@ -12,7 +12,6 @@ struct ChatSidebarView: View {
     var isEmbedded: Bool = false
 
     @State private var pendingDelete: PendingDelete?
-    @State private var showFullHistory = false
 
     private struct PendingDelete: Identifiable {
         let id: String
@@ -30,7 +29,10 @@ struct ChatSidebarView: View {
     private var historySessions: [SessionSummary] {
         let openStored = Set(vm.openChats.compactMap(\.storedSessionID))
         let openIDs = Set(vm.openChats.map(\.id))
-        let all = vm.sessions.filter { !openStored.contains($0.id) && !openIDs.contains($0.id) }
+        let pinned = Set(vm.effectivePinnedIDs)
+        let all = vm.sessions.filter {
+            !openStored.contains($0.id) && !openIDs.contains($0.id) && !pinned.contains($0.id)
+        }
         guard let filter = vm.selectedBotFilter else { return all }
         return all.filter { session in
             let key = vm.botKey(for: session)
@@ -64,36 +66,13 @@ struct ChatSidebarView: View {
         vm.groupRooms.filter { !vm.isPinned($0.id) }
     }
 
-    private struct HistoryGroup: Identifiable {
-        let id: String
-        let title: String
-        let bot: AgentProfileInfo?
-        let sessions: [SessionSummary]
-    }
-
-    private var historyGroups: [HistoryGroup] {
-        var buckets: [String: [SessionSummary]] = [:]
-        var order: [String] = []
-        for session in historySessions {
-            let key = vm.botKey(for: session)
-            if buckets[key] == nil { order.append(key) }
-            buckets[key, default: []].append(session)
-        }
-        return order.map { key in
-            HistoryGroup(
-                id: key,
-                title: vm.displayName(forBotKey: key),
-                bot: vm.profilesByName[key] ?? vm.profilesByName.values.first(where: {
-                    AgentProfileInfo.isDefaultProfileName(key) && $0.isDefault
-                }),
-                sessions: buckets[key] ?? []
-            )
-        }
-    }
-
     private func pinButton(_ id: String) -> some View {
         Button {
-            vm.togglePin(id)
+            if let session = vm.sessions.first(where: { $0.id == id }) {
+                Task { await vm.setSessionPinned(session, pinned: !vm.isPinned(id)) }
+            } else {
+                vm.togglePin(id)
+            }
         } label: {
             Label(vm.isPinned(id) ? "Desafixar" : "Fixar", systemImage: vm.isPinned(id) ? "pin.slash" : "pin")
         }
@@ -225,21 +204,6 @@ struct ChatSidebarView: View {
         .clipShape(Circle())
     }
 
-    private func historyHeader(_ group: HistoryGroup) -> some View {
-        HStack(spacing: 8) {
-            if let bot = group.bot {
-                botAvatarImage(bot, size: 18)
-            } else {
-                Image(systemName: "clock")
-                    .font(.caption2)
-            }
-            Text(group.title)
-            Text("\(group.sessions.count)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     private func conversationRow(
         title: String,
         subtitle: String?,
@@ -362,54 +326,36 @@ struct ChatSidebarView: View {
                             .listRowBackground(Color.clear)
                     }
                 } else {
-                    ForEach(historyGroups) { group in
-                        Section {
-                            ForEach(group.sessions) { session in
-                                historyRow(session)
-                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                        pinButton(session.id)
+                    Section("Histórico") {
+                        ForEach(historySessions) { session in
+                            historyRow(session)
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    pinButton(session.id)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        pendingDelete = PendingDelete(
+                                            id: session.id,
+                                            title: session.title.isEmpty ? "Conversa" : session.title,
+                                            isOpenChat: false,
+                                            openChat: nil
+                                        )
+                                    } label: {
+                                        Label("Excluir", systemImage: "trash")
                                     }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
-                                            pendingDelete = PendingDelete(
-                                                id: session.id,
-                                                title: session.title.isEmpty ? "Conversa" : session.title,
-                                                isOpenChat: false,
-                                                openChat: nil
-                                            )
-                                        } label: {
-                                            Label("Excluir", systemImage: "trash")
-                                        }
-                                        Button {
-                                            Task { await vm.archiveSession(storedID: session.id) }
-                                        } label: {
-                                            Label("Arquivar", systemImage: "archivebox")
-                                        }
-                                        .tint(.orange)
+                                    Button {
+                                        Task { await vm.archiveSession(storedID: session.id) }
+                                    } label: {
+                                        Label("Arquivar", systemImage: "archivebox")
                                     }
-                            }
-                        } header: {
-                            historyHeader(group)
+                                    .tint(.orange)
+                                }
                         }
                     }
                 }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Button {
-                    showFullHistory = true
-                } label: {
-                    Label("Histórico completo", systemImage: "clock.arrow.circlepath")
-                        .font(.subheadline.weight(.medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(HermesTheme.rowHover))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.plain)
-            }
             .refreshable {
                 await vm.loadSessions()
                 await vm.refreshRoster()
@@ -420,10 +366,6 @@ struct ChatSidebarView: View {
         }
         .background(HermesTheme.sidebarBackground.ignoresSafeArea())
         .navigationBarHidden(true)
-        .sheet(isPresented: $showFullHistory) {
-            ChatHistoryView()
-                .environmentObject(vm)
-        }
         .task {
             await vm.loadSessions()
         }
@@ -588,31 +530,53 @@ struct ChatSidebarView: View {
     }
 
     private func historyRow(_ session: SessionSummary) -> some View {
-        Button {
+        let key = vm.botKey(for: session)
+        let botName = vm.displayName(forBotKey: key)
+        let profile = vm.profilesByName[key]
+            ?? vm.profilesByName.values.first(where: { AgentProfileInfo.isDefaultProfileName(key) && $0.isDefault })
+        return Button {
             Task {
-                vm.selectedBotFilter = vm.botKey(for: session)
+                vm.selectedBotFilter = key
                 await vm.resumeSession(session)
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title.isEmpty ? "(sem título)" : session.title)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                    if let date = session.startedAt {
-                        Text(date, format: .dateTime.day().month().hour().minute())
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                if let profile {
+                    botAvatarImage(profile, size: 34)
+                } else {
+                    Image(systemName: "cpu")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(HermesTheme.rowHover))
                 }
-                Spacer(minLength: 0)
-                if session.isActive {
-                    Circle().fill(.green).frame(width: 7, height: 7)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(session.title.isEmpty ? "(sem título)" : session.title)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                        Spacer(minLength: 0)
+                        if session.isActive {
+                            Circle().fill(.green).frame(width: 7, height: 7)
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        Text(botName)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(Color.hermesAccent(hex: profile?.accentHex, fallbackKey: key))
+                        if let date = session.lastActive ?? session.startedAt {
+                            Text("· \(date.formatted(.dateTime.day().month().hour().minute()))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let preview = session.preview, !preview.isEmpty {
+                        Text(preview)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
             .contentShape(Rectangle())

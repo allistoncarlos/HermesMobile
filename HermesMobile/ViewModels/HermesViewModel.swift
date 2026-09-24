@@ -1768,17 +1768,20 @@ final class HermesViewModel: ObservableObject {
 
     func pinKey(forBot name: String) -> String { "bot::\(name.lowercased())" }
 
+    /// Bot dono da sessão. `source` é plataforma (tui/desktop/cli…), então só vale
+    /// se coincidir com um perfil conhecido; senão cai no bot padrão.
     func botKey(for session: SessionSummary) -> String {
+        func resolve(_ raw: String?) -> String? {
+            guard let raw, let name = Self.normalizedProfileName(raw) else { return nil }
+            if AgentProfileInfo.isDefaultProfileName(name) { return "default" }
+            return profilesByName[name] != nil ? name : nil
+        }
         if let raw = session.profile, let name = Self.normalizedProfileName(raw) {
             return AgentProfileInfo.isDefaultProfileName(name) ? "default" : name
         }
-        if let raw = session.source, let name = Self.normalizedProfileName(raw) {
-            return AgentProfileInfo.isDefaultProfileName(name) ? "default" : name
-        }
-        if let fromID = ChatSpeaker.profileKey(fromSessionID: session.id) {
-            return fromID
-        }
-        return "default"
+        return resolve(session.source)
+            ?? resolve(ChatSpeaker.profileKey(fromSessionID: session.id))
+            ?? "default"
     }
 
     func displayName(forBotKey key: String) -> String {
