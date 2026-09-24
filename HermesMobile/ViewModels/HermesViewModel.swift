@@ -71,8 +71,9 @@ final class HermesViewModel: ObservableObject {
     /// Impede `connect()` reentrante (Watch + splash), sem abortar o restore
     /// que já inicia em `.connecting`.
     private var connectInFlight = false
-    /// Evita loop de reconnect automático em queda de WS.
-    private var autoReconnectInFlight = false
+    /// Reconexão silenciosa em curso (a UI do chat permanece; sem alertas).
+    private var silentReconnectInFlight = false
+    @Published private(set) var isReconnecting = false
     private static let pinnedIDsKey = "hermes.drawerPinnedIDs"
     private static let unpinnedIDsKey = "hermes.drawerUnpinnedIDs"
     private static let clearedAutoPinKey = "hermes.clearedHardcodedGroupPin"
@@ -224,19 +225,32 @@ final class HermesViewModel: ObservableObject {
         httpClient = client
         client.restorePersistedCookies()
 
-        let status: HermesStatus
-        do {
-            status = try await client.fetchStatus()
-            serverVersion = status.version
-            authRequired = status.authRequired == true
-            usesCookieAuth = status.usesCookieAuth
-        } catch {
-            let msg = Self.describeConnectionError(error, base: base)
+        // Restauração automática: erros passageiros (ex.: requisição cancelada ao
+        // voltar do background) são repetidos em silêncio antes de mostrar erro.
+        let isRestore = username == nil && password == nil
+        let maxAttempts = isRestore ? 5 : 1
+        var fetched: HermesStatus?
+        var lastError: Error?
+        for attempt in 0..<maxAttempts {
+            if attempt > 0 { try? await Task.sleep(nanoseconds: UInt64(attempt) * 700_000_000) }
+            do {
+                fetched = try await client.fetchStatus()
+                break
+            } catch {
+                lastError = error
+                if !Self.isTransient(error) { break }
+            }
+        }
+        guard let status = fetched else {
+            let msg = Self.describeConnectionError(lastError ?? HermesClientError(message: "Falha de conexão."), base: base)
             statusMessage = msg
             connectionState = .failed(msg)
             syncCompanion()
             return
         }
+        serverVersion = status.version
+        authRequired = status.authRequired == true
+        usesCookieAuth = status.usesCookieAuth
 
         if usesCookieAuth {
             let providers = (try? await client.fetchAuthProviders()) ?? []
@@ -447,36 +461,128 @@ final class HermesViewModel: ObservableObject {
         socket.onEvent = { [weak self] event in
             Task { @MainActor in self?.handle(event) }
         }
-        socket.onClose = { [weak self] in
+        socket.onClose = { [weak self, weak socket] in
             Task { @MainActor in
-                guard let self else { return }
-                guard self.connectionState == .connected || self.connectionState == .connecting else { return }
-                self.connectionState = .disconnected
-                self.statusMessage = "Conexão com o servidor encerrada."
-                self.syncCompanion()
-                await self.autoReconnectIfPossible()
-                #if os(iOS)
-                // Só alerta se não reconectou — queda por lock/suspend costuma
-                // ser recuperável quando ainda há hold de turno.
-                if case .connected = self.connectionState { return }
-                HermesNotifier.shared.notifyConnectionLost(message: "Conexão com o servidor encerrada.")
-                #endif
+                guard let self, let socket, self.ws === socket else { return }
+                // Queda com sessão aberta: recupera em silêncio — a UI do chat
+                // não muda, os chats abertos são preservados e nada é notificado.
+                guard self.connectionState == .connected else { return }
+                await self.reconnectSilently()
             }
         }
         try socket.connect()
         self.ws = socket
     }
 
-    /// Reconecta sozinho após queda de rede — sem voltar à tela de login.
-    private func autoReconnectIfPossible() async {
-        guard !needsManualAuth else { return }
-        guard config.hasSavedConfig, config.hasRestorableAuth else { return }
-        guard !autoReconnectInFlight, !connectInFlight else { return }
-        autoReconnectInFlight = true
-        defer { autoReconnectInFlight = false }
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        guard connectionState == .disconnected || connectionState.isFailed else { return }
-        await connect()
+    private var canRestoreSilently: Bool {
+        !needsManualAuth && config.hasSavedConfig && config.hasRestorableAuth
+    }
+
+    /// Erros de rede passageiros (suspensão do app, troca de rede, Tailscale acordando).
+    private static func isTransient(_ error: Error) -> Bool {
+        if error is WSClientError { return true }
+        let ns = error as NSError
+        guard ns.domain == NSURLErrorDomain else { return false }
+        switch URLError.Code(rawValue: ns.code) {
+        case .cancelled, .timedOut, .networkConnectionLost, .notConnectedToInternet,
+             .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed,
+             .internationalRoamingOff, .dataNotAllowed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Garante socket vivo antes de agir (voltar do background, enviar mensagem).
+    /// Não mexe em `connectionState`: a UI segue no chat enquanto reconecta.
+    func ensureLiveConnection() async {
+        guard connectionState == .connected else { return }
+        if let ws, await ws.checkAlive() { return }
+        await reconnectSilently()
+    }
+
+    /// Chamado quando o app volta ao primeiro plano.
+    func handleForeground() async {
+        switch connectionState {
+        case .connected:
+            await ensureLiveConnection()
+        case .failed, .disconnected:
+            guard canRestoreSilently, !connectInFlight else { return }
+            await connect()
+        default:
+            break
+        }
+    }
+
+    /// Reabre o WebSocket com backoff, sem sair da tela do chat, sem apagar
+    /// conversas abertas e sem alerta de conexão. Só pede login se a sessão
+    /// realmente expirou.
+    private func reconnectSilently() async {
+        if silentReconnectInFlight {
+            while silentReconnectInFlight { try? await Task.sleep(nanoseconds: 200_000_000) }
+            return
+        }
+        guard canRestoreSilently, !connectInFlight else { return }
+        silentReconnectInFlight = true
+        isReconnecting = true
+        defer {
+            silentReconnectInFlight = false
+            isReconnecting = false
+        }
+
+        let delays: [UInt64] = [0, 500, 1_000, 2_000, 4_000, 8_000]
+        var attempt = 0
+        while connectionState == .connected || connectionState == .disconnected {
+            let delay = delays[min(attempt, delays.count - 1)]
+            if delay > 0 { try? await Task.sleep(nanoseconds: delay * 1_000_000) }
+            attempt += 1
+            guard let base = ServerConfig.normalizedURL(from: config.baseURLString) else { return }
+            let client: HermesClient
+            if let existing = httpClient {
+                client = existing
+            } else {
+                client = HermesClient(
+                    baseURL: base,
+                    sessionToken: config.sessionToken.isEmpty ? nil : config.sessionToken,
+                    urlSession: HermesHTTPSession.shared
+                )
+                httpClient = client
+                client.restorePersistedCookies()
+            }
+
+            do {
+                try await openWebSocket(base: base, client: client)
+            } catch {
+                if usesCookieAuth, Self.isAuthFailure(error) {
+                    do {
+                        _ = try await client.refreshSession()
+                        markSessionRestorable(client: client)
+                        continue
+                    } catch {
+                        if Self.isAuthFailure(error) {
+                            needsManualAuth = true
+                            connectionState = .waitingAuth
+                            statusMessage = "Sessão expirada. Informe usuário e senha para entrar de novo."
+                            syncCompanion()
+                            return
+                        }
+                    }
+                }
+                continue // rede ainda indisponível: tenta de novo
+            }
+
+            // `connect()` do socket é assíncrono; só o pong confirma que abriu.
+            guard let socket = ws, await socket.checkAlive(timeout: 5) else { continue }
+
+            statusMessage = nil
+            connectionState = .connected
+            if let sid = activeChat?.backingSessionID ?? activeChat?.id, !sid.contains("::") {
+                _ = try? await socket.call(method: "session.activate", params: ["session_id": .string(sid)])
+            }
+            syncCompanion()
+            await loadProfiles()
+            return
+        }
     }
 
     #if os(iOS)
@@ -876,7 +982,9 @@ final class HermesViewModel: ObservableObject {
 
     func send(_ rawText: String, attachments: [ChatAttachment] = []) async {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (!text.isEmpty || !attachments.isEmpty), let ws, var chat = mutableActiveChat() else { return }
+        guard !text.isEmpty || !attachments.isEmpty else { return }
+        await ensureLiveConnection()
+        guard let ws, var chat = mutableActiveChat() else { return }
 
         if chat.hasPendingClarify {
             guard !text.isEmpty else { return }
