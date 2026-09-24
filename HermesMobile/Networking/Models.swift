@@ -374,6 +374,12 @@ struct SessionSummary: Identifiable, Equatable {
     var source: String?
     var isActive: Bool
     var preview: String? = nil
+    /// Perfil (bot) dono da sessão — `/api/profiles/sessions` marca cada linha com ele.
+    var profile: String? = nil
+    /// Flag durável do servidor (`sessions.pinned`).
+    var pinned: Bool = false
+    var lastActive: Date? = nil
+    var messageCount: Int = 0
 }
 
 /// Tipo de conversa no drawer (sessão normal, grupo WhatsApp-like, DM de bot).

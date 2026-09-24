@@ -14,7 +14,6 @@ struct ChatHistoryView: View {
     enum Grouping: String, CaseIterable, Identifiable {
         case recent = "Recentes"
         case bot = "Por bot"
-        case group = "Por grupo"
         var id: String { rawValue }
     }
 
@@ -67,7 +66,7 @@ struct ChatHistoryView: View {
                 date: session.startedAt,
                 botKey: key,
                 botName: vm.displayName(forBotKey: key),
-                group: group(for: session),
+                group: nil,
                 isOpen: open != nil,
                 isActive: session.isActive,
                 session: session,
@@ -118,20 +117,10 @@ struct ChatHistoryView: View {
         return result
             .map { entry in
                 var e = entry
-                e.isPinned = vm.isPinned(entry.pinID)
+                e.isPinned = entry.session?.pinned ?? vm.isPinned(entry.pinID)
                 return e
             }
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-    }
-
-    /// Grupo a que a sessão pertence (melhor esforço: source/id/título citam a sala).
-    private func group(for session: SessionSummary) -> GroupRoom? {
-        let haystack = [session.source, session.id, session.title]
-            .compactMap { $0?.lowercased() }
-        return vm.groupRooms.first { room in
-            let name = room.name.lowercased()
-            return haystack.contains { $0 == room.id || $0 == name || $0.contains("group::\(name)") }
-        }
     }
 
     private var filtered: [Entry] {
@@ -170,28 +159,6 @@ struct ChatHistoryView: View {
                     id: key,
                     title: key == "group" ? "Grupos" : vm.displayName(forBotKey: key),
                     botKey: key, group: nil, entries: buckets[key] ?? []
-                )
-            }
-        case .group:
-            var buckets: [String: [Entry]] = [:]
-            var order: [String] = []
-            var rooms: [String: GroupRoom] = [:]
-            for e in items {
-                let key = e.group?.id ?? "none"
-                if buckets[key] == nil { order.append(key) }
-                buckets[key, default: []].append(e)
-                if let g = e.group { rooms[key] = g }
-            }
-            let sorted = order.sorted { a, b in
-                if a == "none" { return false }
-                if b == "none" { return true }
-                return a < b
-            }
-            return sorted.map { key in
-                Section_(
-                    id: key,
-                    title: rooms[key]?.name ?? "Sem grupo",
-                    botKey: nil, group: rooms[key], entries: buckets[key] ?? []
                 )
             }
         }
@@ -272,7 +239,7 @@ struct ChatHistoryView: View {
 
     private func reload() async {
         loading = true
-        await vm.loadSessions(limit: 1000)
+        await vm.loadSessions(limit: 500)
         await vm.refreshRoster()
         loading = false
     }
@@ -362,7 +329,11 @@ struct ChatHistoryView: View {
         .buttonStyle(.plain)
         .swipeActions(edge: .leading) {
             Button {
-                vm.togglePin(entry.pinID)
+                if let session = entry.session {
+                    Task { await vm.setSessionPinned(session, pinned: !entry.isPinned) }
+                } else {
+                    vm.togglePin(entry.pinID)
+                }
             } label: {
                 Label(entry.isPinned ? "Desafixar" : "Fixar", systemImage: entry.isPinned ? "pin.slash" : "pin")
             }

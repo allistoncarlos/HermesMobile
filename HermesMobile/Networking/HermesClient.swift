@@ -24,13 +24,13 @@ final class HermesClient {
     }
 
 
-    private func endpoint(_ path: String) throws -> URL {
+    private func endpoint(_ path: String, query: [URLQueryItem]? = nil) throws -> URL {
         guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw HermesClientError(message: "URL base inválida.")
         }
         let normalized = path.hasPrefix("/") ? path : "/\(path)"
         comps.path = normalized
-        comps.query = nil
+        comps.queryItems = query
         comps.fragment = nil
         guard let url = comps.url else {
             throw HermesClientError(message: "Não foi possível montar \(path).")
@@ -393,6 +393,74 @@ final class HermesClient {
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             let detail = Self.errorDetail(from: data) ?? "HTTP \(code)"
             throw HermesClientError(message: "Não foi possível arquivar: \(detail)")
+        }
+    }
+
+    /// Fixa/desafixa no servidor — `PATCH /api/sessions/{id}` `{pinned, profile}`.
+    func setSessionPinned(id: String, pinned: Bool, profile: String?) async throws {
+        var request = URLRequest(url: try endpoint("/api/sessions/\(Self.pathEncoded(id))"))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 20
+        applyAuthHeaders(to: &request)
+        var body: [String: Any] = ["pinned": pinned]
+        if let profile, !profile.isEmpty { body["profile"] = profile }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let detail = Self.errorDetail(from: data) ?? "HTTP \(code)"
+            throw HermesClientError(message: "Não foi possível fixar: \(detail)")
+        }
+    }
+
+    /// Histórico de TODOS os perfis (bots) — `GET /api/profiles/sessions`.
+    /// Cada linha vem marcada com `profile` (bot dono) e `pinned` (flag do servidor);
+    /// fixadas além do limite são devolvidas junto.
+    func fetchAllProfileSessions(limit: Int = 500) async throws -> [SessionSummary] {
+        let url = try endpoint("/api/profiles/sessions", query: [
+            URLQueryItem(name: "limit", value: String(min(max(limit, 1), 500))),
+            URLQueryItem(name: "order", value: "recent"),
+            URLQueryItem(name: "archived", value: "exclude"),
+            URLQueryItem(name: "exclude_sources", value: "cron"),
+        ])
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 30
+        applyAuthHeaders(to: &request)
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw HermesClientError(message: Self.errorDetail(from: data) ?? "HTTP \(code)")
+        }
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = root["sessions"] as? [[String: Any]] else {
+            throw HermesClientError(message: "Resposta de histórico inválida.")
+        }
+        func date(_ any: Any?) -> Date? {
+            guard let n = (any as? NSNumber)?.doubleValue, n > 0 else { return nil }
+            return Date(timeIntervalSince1970: n > 20_000_000_000 ? n / 1000 : n)
+        }
+        return rows.compactMap { row in
+            guard let id = row["id"] as? String, !id.isEmpty else { return nil }
+            if (row["hidden"] as? Bool) == true { return nil }
+            let title = (row["title"] as? String) ?? ""
+            let preview = (row["preview"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let profile = (row["profile"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let started = date(row["started_at"])
+            let last = date(row["last_active"]) ?? started
+            return SessionSummary(
+                id: id,
+                title: title.isEmpty ? "Conversa" : title,
+                startedAt: last ?? started,
+                source: (row["source"] as? String) ?? profile,
+                isActive: (row["is_active"] as? Bool) ?? false,
+                preview: preview,
+                profile: profile,
+                pinned: (row["pinned"] as? Bool) ?? false,
+                lastActive: last,
+                messageCount: (row["message_count"] as? NSNumber)?.intValue ?? 0
+            )
         }
     }
 

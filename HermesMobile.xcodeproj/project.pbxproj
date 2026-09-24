@@ -151,7 +151,7 @@
 		CA02F1D1768D78BF7A95ADFA /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		CFF3A6A9EEDD9168D5788DF5 /* HermesWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DAFE4C42BBB290587C7A8C74 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
-		E11909D98B0F5781E0DA91D1 /* HermesMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HermesMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E11909D98B0F5781E0DA91D1 /* HermesMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E65C06BC1BB85CF96F28E7C6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E7429591D4750B1CB9002073 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EC231C2E4F4DE4B6506DC9BF /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -628,8 +628,13 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = HermesWatchWidgets/HermesWatchWidgets.entitlements;
+				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				INFOPLIST_FILE = HermesWatchWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.allistoncarlos.HermesMobile.watchkitapp.widgets;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -645,6 +650,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HermesWatch/HermesWatch.entitlements;
+				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesWatch/Resources/Info.plist;
 				INFOPLIST_KEY_WKApplication = YES;
@@ -726,8 +732,13 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = HermesWatchWidgets/HermesWatchWidgets.entitlements;
+				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				INFOPLIST_FILE = HermesWatchWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.allistoncarlos.HermesMobile.watchkitapp.widgets;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -743,6 +754,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HermesWatch/HermesWatch.entitlements;
+				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesWatch/Resources/Info.plist;
 				INFOPLIST_KEY_WKApplication = YES;
@@ -761,6 +773,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.5;
@@ -780,6 +793,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = DLA5J5JEZ2;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = HermesMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.5;

@@ -834,6 +834,11 @@ final class HermesViewModel: ObservableObject {
     }
 
     func loadSessions(limit: Int = 50) async {
+        // Preferência: agregador REST de todos os perfis (traz bot dono + pins do servidor).
+        if let client = httpClient, let rows = try? await client.fetchAllProfileSessions(limit: max(limit, 200)) {
+            sessions = rows
+            return
+        }
         guard let ws else { return }
         do {
             let result = try await ws.call(method: "session.list", params: ["limit": .number(Double(limit))])
@@ -875,10 +880,12 @@ final class HermesViewModel: ObservableObject {
         await ensureLiveConnection()
         guard let ws else { return false }
         do {
-            let result = try await ws.call(
-                method: "session.resume",
-                params: ["session_id": .string(summary.id), "cols": .number(80)]
-            )
+            var resumeParams: [String: JSONValue] = ["session_id": .string(summary.id), "cols": .number(80)]
+            // Sessão de outro bot vive no state.db do perfil dele.
+            if let profile = summary.profile, !AgentProfileInfo.isDefaultProfileName(profile) {
+                resumeParams["profile"] = .string(profile)
+            }
+            let result = try await ws.call(method: "session.resume", params: resumeParams)
             let sid = result["session_id"]?.stringValue ?? summary.id
             var chat = OpenChat(
                 id: sid,
@@ -1686,6 +1693,9 @@ final class HermesViewModel: ObservableObject {
         for room in groupRooms where room.isPinnedOnServer {
             ids.append(room.id)
         }
+        for session in sessions where session.pinned {
+            ids.append(session.id)
+        }
         for bot in drawerBots where bot.isPinnedOnServer {
             ids.append(pinKey(forBot: bot.name))
         }
@@ -1703,6 +1713,20 @@ final class HermesViewModel: ObservableObject {
     }
 
     func isPinned(_ id: String) -> Bool { effectivePinnedIDs.contains(id) }
+
+    /// Fixa/desafixa uma sessão do histórico: `sessions.pinned` no servidor (vale para
+    /// todos os clientes, como no desktop) e espelha no estado local.
+    func setSessionPinned(_ session: SessionSummary, pinned: Bool) async {
+        if let i = sessions.firstIndex(where: { $0.id == session.id }) { sessions[i].pinned = pinned }
+        pinnedIDs.removeAll { $0 == session.id }
+        unpinnedIDs.removeAll { $0 == session.id }
+        do {
+            try await httpClient?.setSessionPinned(id: session.id, pinned: pinned, profile: session.profile)
+        } catch {
+            if let i = sessions.firstIndex(where: { $0.id == session.id }) { sessions[i].pinned = !pinned }
+            statusMessage = error.localizedDescription
+        }
+    }
 
     func togglePin(_ id: String) {
         if isPinned(id) {
@@ -1745,6 +1769,9 @@ final class HermesViewModel: ObservableObject {
     func pinKey(forBot name: String) -> String { "bot::\(name.lowercased())" }
 
     func botKey(for session: SessionSummary) -> String {
+        if let raw = session.profile, let name = Self.normalizedProfileName(raw) {
+            return AgentProfileInfo.isDefaultProfileName(name) ? "default" : name
+        }
         if let raw = session.source, let name = Self.normalizedProfileName(raw) {
             return AgentProfileInfo.isDefaultProfileName(name) ? "default" : name
         }
