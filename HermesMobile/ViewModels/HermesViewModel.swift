@@ -1843,40 +1843,56 @@ final class HermesViewModel: ObservableObject {
             return
         }
 
+        // Feedback imediato: entra no chat do bot já, sem esperar o servidor. O chat é
+        // utilizável (o backing session é criado no primeiro envio) e é refinado abaixo.
+        pruneBlankOpenChats(keeping: key)
+        if !openChats.contains(where: { $0.id == key }) {
+            openChats.append(OpenChat(id: key, title: profile.displayName, kind: .bot, subtitle: profile.summary))
+        }
+        activeChatID = key
+        showSidebar = false
+        #if os(iOS)
+        syncNotifierContext()
+        #endif
+
         let candidateIDs = [
             profile.canonicalSessionID,
             profile.lastSessionID,
             sessions.first(where: { botKey(for: $0) == profile.name })?.id,
         ].compactMap { $0 }.filter { !$0.isEmpty }
 
-        for sid in candidateIDs {
+        var tried = Set<String>()
+        for sid in candidateIDs where tried.insert(sid).inserted {
+            // A conversa do bot vive no state.db do PERFIL dele: sem `profile` o servidor
+            // procura no banco errado ("session not found").
             let ok = await resumeSession(
-                SessionSummary(id: sid, title: profile.displayName, startedAt: nil, source: profile.name, isActive: false)
+                SessionSummary(
+                    id: sid, title: profile.displayName, startedAt: nil,
+                    source: profile.name, isActive: false, profile: profile.name
+                )
             )
             if ok, var chat = openChats.first(where: { $0.id == sid || $0.storedSessionID == sid }) {
                 chat.kind = .bot
                 chat.subtitle = profile.summary ?? chat.subtitle
                 commit(chat)
+                openChats.removeAll { $0.id == key && $0.backingSessionID == nil && $0.messages.isEmpty }
+                activeChatID = chat.id
                 return
             }
         }
 
-        pruneBlankOpenChats(keeping: key)
-        var chat = OpenChat(id: key, title: profile.displayName, kind: .bot, subtitle: profile.summary)
+        // Sem histórico salvo: sessão nova do bot.
+        guard let placeholder = openChats.first(where: { $0.id == key }) else { return }
         do {
-            chat = try await ensureBackingSession(chat)
+            let chat = try await ensureBackingSession(placeholder)
+            if let i = openChats.firstIndex(where: { $0.id == chat.id }) {
+                openChats[i] = chat
+            }
+            activeChatID = chat.id
+            syncCompanion()
         } catch {
-            statusMessage = error.localizedDescription
-            showSidebar = false
-            return
+            statusMessage = "Não foi possível abrir \(profile.displayName): \(error.localizedDescription)"
         }
-        if let i = openChats.firstIndex(where: { $0.id == chat.id }) {
-            openChats[i] = chat
-        } else {
-            openChats.append(chat)
-        }
-        await selectChat(chat.id)
-        syncCompanion()
     }
 
     private func chatMatchesBot(_ chat: OpenChat, profile: AgentProfileInfo) -> Bool {
