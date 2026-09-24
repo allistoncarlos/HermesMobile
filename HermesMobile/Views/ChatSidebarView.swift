@@ -12,6 +12,7 @@ struct ChatSidebarView: View {
     var isEmbedded: Bool = false
 
     @State private var pendingDelete: PendingDelete?
+    @State private var showFullHistory = false
 
     private struct PendingDelete: Identifiable {
         let id: String
@@ -395,6 +396,20 @@ struct ChatSidebarView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button {
+                    showFullHistory = true
+                } label: {
+                    Label("Histórico completo", systemImage: "clock.arrow.circlepath")
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(HermesTheme.rowHover))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+            }
             .refreshable {
                 await vm.loadSessions()
                 await vm.refreshRoster()
@@ -405,6 +420,10 @@ struct ChatSidebarView: View {
         }
         .background(HermesTheme.sidebarBackground.ignoresSafeArea())
         .navigationBarHidden(true)
+        .sheet(isPresented: $showFullHistory) {
+            ChatHistoryView()
+                .environmentObject(vm)
+        }
         .task {
             await vm.loadSessions()
         }

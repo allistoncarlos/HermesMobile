@@ -833,10 +833,10 @@ final class HermesViewModel: ObservableObject {
         await deleteSession(storedID: sid)
     }
 
-    func loadSessions() async {
+    func loadSessions(limit: Int = 50) async {
         guard let ws else { return }
         do {
-            let result = try await ws.call(method: "session.list", params: ["limit": .number(50)])
+            let result = try await ws.call(method: "session.list", params: ["limit": .number(Double(limit))])
             var list: [JSONValue] = []
             if let arr = result["sessions"]?.arrayValue {
                 list = arr
