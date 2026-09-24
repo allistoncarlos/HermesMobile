@@ -109,8 +109,16 @@ struct ContentView: View {
         }
         .task(id: reconnectTaskID) {
             guard shouldStayOnSessionUI else { return }
-            if case .disconnected = vm.connectionState {
+            switch vm.connectionState {
+            case .disconnected:
                 await vm.connect()
+            case .failed:
+                // Sem botão obrigatório: tenta de novo sozinho até o servidor voltar.
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard !Task.isCancelled else { return }
+                await vm.connect()
+            default:
+                break
             }
         }
     }

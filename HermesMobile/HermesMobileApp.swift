@@ -34,7 +34,10 @@ struct HermesMobileApp: App {
                     if phase == .active {
                         CompanionSync.shared.push(from: viewModel)
                         HermesAudioSession.reassertIfNeeded()
-                        Task { await viewModel.refreshRoster() }
+                        Task {
+                            await viewModel.handleForeground()
+                            await viewModel.refreshRoster()
+                        }
                     }
                     #endif
                 }
