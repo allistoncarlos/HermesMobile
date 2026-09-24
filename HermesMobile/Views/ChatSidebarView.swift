@@ -20,19 +20,10 @@ struct ChatSidebarView: View {
         let openChat: OpenChat?
     }
 
-    /// Abertas com conteúdo (em branco não polui a lista — “Nova conversa” já cobre).
-    private var meaningfulOpenChats: [OpenChat] {
-        vm.openChats.filter { !HermesViewModel.isBlankChat($0) }
-    }
-
     /// Histórico sem duplicar as que já estão em Abertas, opcionalmente só de um bot.
     private var historySessions: [SessionSummary] {
-        let openStored = Set(vm.openChats.compactMap(\.storedSessionID))
-        let openIDs = Set(vm.openChats.map(\.id))
         let pinned = Set(vm.effectivePinnedIDs)
-        let all = vm.sessions.filter {
-            !openStored.contains($0.id) && !openIDs.contains($0.id) && !pinned.contains($0.id)
-        }
+        let all = vm.sessions.filter { !pinned.contains($0.id) }
         guard let filter = vm.selectedBotFilter else { return all }
         return all.filter { session in
             let key = vm.botKey(for: session)
@@ -287,35 +278,6 @@ struct ChatSidebarView: View {
                     }
                 }
 
-                if !meaningfulOpenChats.isEmpty {
-                    Section("Abertas") {
-                        ForEach(meaningfulOpenChats) { chat in
-                            openChatRow(chat)
-                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    pinButton(vm.isPinned(chat.id) ? chat.id : chat.storedSessionID ?? chat.id)
-                                }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        pendingDelete = PendingDelete(
-                                            id: chat.storedSessionID ?? chat.id,
-                                            title: chat.title.isEmpty ? "Nova conversa" : chat.title,
-                                            isOpenChat: true,
-                                            openChat: chat
-                                        )
-                                    } label: {
-                                        Label("Excluir", systemImage: "trash")
-                                    }
-                                    Button {
-                                        Task { await vm.archiveOpenChat(chat) }
-                                    } label: {
-                                        Label("Arquivar", systemImage: "archivebox")
-                                    }
-                                    .tint(.orange)
-                                }
-                        }
-                    }
-                }
-
                 if historySessions.isEmpty {
                     Section("Histórico") {
                         Text(vm.selectedBotFilter == nil
@@ -488,45 +450,6 @@ struct ChatSidebarView: View {
             return "Nova conversa"
         }
         return "Nova conversa · \(vm.displayName(forBotKey: filter))"
-    }
-
-    private func openChatRow(_ chat: OpenChat) -> some View {
-        Button {
-            Task { await vm.selectChat(chat.id) }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(chat.title.isEmpty ? "Nova conversa" : chat.title)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                    if chat.isStreaming {
-                        Text("Respondendo…")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                    }
-                }
-                Spacer(minLength: 0)
-                if chat.needsAttention || chat.pendingApproval != nil || chat.hasPendingClarify {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 8, height: 8)
-                } else if chat.id == vm.activeChatID {
-                    Image(systemName: "checkmark")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowBackground(
-            chat.id == vm.activeChatID ? HermesTheme.rowHover : Color.clear
-        )
     }
 
     private func historyRow(_ session: SessionSummary) -> some View {

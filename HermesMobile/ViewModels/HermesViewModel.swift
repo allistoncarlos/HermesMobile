@@ -1838,51 +1838,33 @@ final class HermesViewModel: ObservableObject {
         }
 
         let key = pinKey(forBot: profile.name)
-        if let existing = openChats.first(where: { chatMatchesBot($0, profile: profile) }) {
-            await selectChat(existing.id)
+
+        // Escolher um bot abre uma conversa NOVA com ele (as antigas ficam no histórico).
+        // Só reaproveita o chat do bot se ainda está vazio ou ocupado (turno rodando,
+        // aprovação/pergunta pendente) — para não descartar trabalho em andamento.
+        let matching = openChats.filter { chatMatchesBot($0, profile: profile) }
+        if let reusable = matching.first(where: { chat in
+            chat.isStreaming || chat.pendingApproval != nil || chat.hasPendingClarify
+                || !chat.messages.contains { $0.role == .user }
+        }) {
+            await selectChat(reusable.id)
             return
         }
+        // Chats anteriores do bot deixam de ficar abertos; seguem salvos no servidor.
+        let staleIDs = Set(matching.map(\.id))
+        openChats.removeAll { staleIDs.contains($0.id) }
 
-        // Feedback imediato: entra no chat do bot já, sem esperar o servidor. O chat é
-        // utilizável (o backing session é criado no primeiro envio) e é refinado abaixo.
+        // Feedback imediato: entra no chat novo já, sem esperar o servidor. A sessão real
+        // é criada agora (ou no primeiro envio, se falhar).
         pruneBlankOpenChats(keeping: key)
-        if !openChats.contains(where: { $0.id == key }) {
-            openChats.append(OpenChat(id: key, title: profile.displayName, kind: .bot, subtitle: profile.summary))
-        }
+        let placeholder = OpenChat(id: key, title: profile.displayName, kind: .bot, subtitle: profile.summary)
+        openChats.append(placeholder)
         activeChatID = key
         showSidebar = false
         #if os(iOS)
         syncNotifierContext()
         #endif
 
-        let candidateIDs = [
-            profile.canonicalSessionID,
-            profile.lastSessionID,
-            sessions.first(where: { botKey(for: $0) == profile.name })?.id,
-        ].compactMap { $0 }.filter { !$0.isEmpty }
-
-        var tried = Set<String>()
-        for sid in candidateIDs where tried.insert(sid).inserted {
-            // A conversa do bot vive no state.db do PERFIL dele: sem `profile` o servidor
-            // procura no banco errado ("session not found").
-            let ok = await resumeSession(
-                SessionSummary(
-                    id: sid, title: profile.displayName, startedAt: nil,
-                    source: profile.name, isActive: false, profile: profile.name
-                )
-            )
-            if ok, var chat = openChats.first(where: { $0.id == sid || $0.storedSessionID == sid }) {
-                chat.kind = .bot
-                chat.subtitle = profile.summary ?? chat.subtitle
-                commit(chat)
-                openChats.removeAll { $0.id == key && $0.backingSessionID == nil && $0.messages.isEmpty }
-                activeChatID = chat.id
-                return
-            }
-        }
-
-        // Sem histórico salvo: sessão nova do bot.
-        guard let placeholder = openChats.first(where: { $0.id == key }) else { return }
         do {
             let chat = try await ensureBackingSession(placeholder)
             if let i = openChats.firstIndex(where: { $0.id == chat.id }) {
