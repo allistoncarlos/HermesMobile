@@ -833,7 +833,7 @@ final class HermesViewModel: ObservableObject {
         await deleteSession(storedID: sid)
     }
 
-    /// Marca a origem da sessão (`source = ios.<dispositivo>`); o servidor grava como veio.
+    /// Marca a origem da sessão (`source = iOS.<dispositivo>`); o servidor grava como veio.
     private func sessionOriginParams(_ params: [String: JSONValue]) -> [String: JSONValue] {
         #if os(iOS)
         var out = params

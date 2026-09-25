@@ -47,7 +47,7 @@ enum HermesDeviceIdentity {
     }
 
     /// `source` enviado ao servidor em `session.create` / `session.resume`:
-    /// `ios.<nome-do-dispositivo>` (ex.: `ios.iPhone-de-Alliston`). O servidor grava o
+    /// `iOS.<nome-do-dispositivo>` (ex.: `iOS.iPhone-de-Alliston`). O servidor grava o
     /// valor como veio, então cada aparelho fica identificável (Android virá como `android.<nome>`).
     static var sourceTag: String {
         "\(platform).\(sanitizedName(deviceName))"
@@ -66,5 +66,6 @@ enum HermesDeviceIdentity {
         return out.isEmpty ? "device" : out
     }
 
-    static var platform: String { "ios" }
+    /// Igual a `UIDevice.current.systemName` ("iOS" em iPhone e iPad).
+    static var platform: String { "iOS" }
 }
