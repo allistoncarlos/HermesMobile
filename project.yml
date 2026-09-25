@@ -21,8 +21,8 @@ targets:
       path: HermesMobile/Resources/Info.plist
       properties:
         CFBundleDisplayName: Hermes
-        CFBundleShortVersionString: "1.0.1"
-        CFBundleVersion: "4"
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "1"
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
@@ -78,8 +78,8 @@ targets:
       path: HermesWatch/Resources/Info.plist
       properties:
         CFBundleDisplayName: Hermes
-        CFBundleShortVersionString: "1.0.1"
-        CFBundleVersion: "4"
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "1"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.allistoncarlos.HermesMobile
         WKRunsIndependentlyOfCompanionApp: false
@@ -127,8 +127,8 @@ targets:
       path: HermesWatchWidgets/Info.plist
       properties:
         CFBundleDisplayName: Hermes
-        CFBundleShortVersionString: "1.0.1"
-        CFBundleVersion: "4"
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "1"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
