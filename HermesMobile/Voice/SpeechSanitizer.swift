@@ -25,6 +25,10 @@ enum SpeechSanitizer {
         s = s.replacingOccurrences(of: #"`([^`]+)`"#, with: "$1", options: .regularExpression)
         // URLs
         s = s.replacingOccurrences(of: #"\bhttps?://\S+"#, with: " link ", options: .regularExpression)
+        // Anexos MEDIA:<path> — viram chip na tela; falado, o caminho/slug do
+        // arquivo é ruído (mirrors apps/desktop/src/lib/speech-text.ts MEDIA_PATH_RE).
+        s = s.replacingOccurrences(
+            of: #"[ \t]*MEDIA:\S+?(?=[.,;:!?)\]]*(?:\s|$))"#, with: "", options: .regularExpression)
         // Headers / listas (linha a linha)
         s = s
             .components(separatedBy: .newlines)
