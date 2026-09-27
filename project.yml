@@ -21,7 +21,7 @@ targets:
       path: HermesMobile/Resources/Info.plist
       properties:
         CFBundleDisplayName: Hermes
-        CFBundleShortVersionString: "1.1"
+        CFBundleShortVersionString: "1.2"
         CFBundleVersion: "1"
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
@@ -78,7 +78,7 @@ targets:
       path: HermesWatch/Resources/Info.plist
       properties:
         CFBundleDisplayName: Hermes
-        CFBundleShortVersionString: "1.1"
+        CFBundleShortVersionString: "1.2"
         CFBundleVersion: "1"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.allistoncarlos.HermesMobile
@@ -127,7 +127,7 @@ targets:
       path: HermesWatchWidgets/Info.plist
       properties:
         CFBundleDisplayName: Hermes
-        CFBundleShortVersionString: "1.1"
+        CFBundleShortVersionString: "1.2"
         CFBundleVersion: "1"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
