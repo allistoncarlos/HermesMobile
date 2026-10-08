@@ -23,6 +23,7 @@ targets:
         CFBundleDisplayName: Hermes
         CFBundleShortVersionString: "1.2"
         CFBundleVersion: "1"
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
@@ -80,6 +81,7 @@ targets:
         CFBundleDisplayName: Hermes
         CFBundleShortVersionString: "1.2"
         CFBundleVersion: "1"
+        ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.allistoncarlos.HermesMobile
         WKRunsIndependentlyOfCompanionApp: false
